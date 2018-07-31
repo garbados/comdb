@@ -1,6 +1,6 @@
 'use strict'
 
-const { isEqual } = require('lodash')
+const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const Crypt = require('./lib/crypt')
 

@@ -24,7 +24,7 @@
   },
   "homepage": "https://github.com/garbados/comdb#readme",
   "dependencies": {
-    "bcrypt": "^3.0.0",
+    "lodash.isequal": "^4.5.0",
     "pouchdb": "^7.0.0"
   },
   "devDependencies": {

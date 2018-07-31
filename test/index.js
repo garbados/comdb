@@ -1,7 +1,7 @@
 /* global describe, it, before, after */
 'use strict'
 
-const { isEqual } = require('lodash')
+const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const PouchDB = require('pouchdb')
 const ComDB = require('..')
