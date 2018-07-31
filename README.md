@@ -1,5 +1,11 @@
 # ComDB
 
+[![Build Status](https://img.shields.io/travis/garbados/comdb/master.svg?style=flat-square)](https://travis-ci.org/garbados/comdb)
+[![Coverage Status](https://img.shields.io/coveralls/github/garbados/comdb/master.svg?style=flat-square)](https://coveralls.io/github/garbados/comdb?branch=master)
+[![Stability](https://img.shields.io/badge/stability-experimental-orange.svg?style=flat-square)](https://nodejs.org/api/documentation.html#documentation_stability_index)
+[![NPM Version](https://img.shields.io/npm/v/comdb.svg?style=flat-square)](https://www.npmjs.com/package/comdb)
+[![JS Standard Style](https://img.shields.io/badge/code%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/feross/standard)
+
 A [PouchDB](https://pouchdb.com/) plugin that transparently encrypts and decrypts its data so that when replicating, only encrypted data is sent, and encrypted data received is automatically decrypted.
 
 As an example, here's what happens when you replicate data to a [CouchDB](https://couchdb.apache.org/) cluster:
