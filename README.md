@@ -181,4 +181,4 @@ A formal code of conduct is forthcoming. Pending it, contributions will be moder
 
 ## License
 
-[Apache-2.0](./LICENSE.md)
+[Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.html)
