@@ -46,12 +46,12 @@ describe('ComDB', function () {
         }).then(({ payload }) => {
           return this.db.decrypt(payload)
         }).then((plainDoc) => {
-          assert.equal(plainDoc._deleted, true)
+          assert.strictEqual(plainDoc._deleted, true)
         })
       }).then(() => {
         let caught = false
         return this.db.get(doc._id).catch((error) => {
-          assert.equal(error.name, 'not_found')
+          assert.strictEqual(error.name, 'not_found')
           caught = true
         }).then((doc) => {
           assert(caught, 'Document was not deleted!')
@@ -79,7 +79,7 @@ describe('ComDB', function () {
           this.db.allDocs(opts),
           this.db2.allDocs(opts)
         ]).then(([ results1, results2 ]) => {
-          assert.equal(results1.total_rows, results2.total_rows)
+          assert.strictEqual(results1.total_rows, results2.total_rows)
           const doc1 = results1.rows[0].doc
           const doc2 = results2.rows[0].doc
           assert(isEqual(doc1, doc2))

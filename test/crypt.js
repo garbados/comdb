@@ -12,7 +12,7 @@ describe('crypt', function () {
     return crypt.encrypt(plaintext).then((ciphertext) => {
       return crypt.decrypt(ciphertext)
     }).then((newtext) => {
-      assert.equal(newtext, plaintext)
+      assert.strictEqual(newtext, plaintext)
     })
   })
 })

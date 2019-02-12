@@ -29,7 +29,7 @@ db.post({ greetings: 'hello world' }).then(({ id }) => {
 The database's methods, except for replication, refer to the
 decrypted database. Here is a decrypted document retrieved by ID:
   `)
-  assert.equal(doc.greetings, 'hello world')
+  assert.strictEqual(doc.greetings, 'hello world')
   console.log(doc)
   // now let's check the encrypted db
   return db._encrypted.allDocs({ include_docs: true })
