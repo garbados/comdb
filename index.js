@@ -37,7 +37,7 @@ function processEncryptedChange (decrypted, encrypted, ids = []) {
     return Promise.all([
       decrypted.bulkDocs(decryptedDocs, { new_edits: false }),
       decrypted.bulkDocs(deletedDocs)
-    ]).then(([ results1, results2 ]) => {
+    ]).then(([results1, results2]) => {
       return results1.concat(results2)
     })
   })

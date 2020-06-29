@@ -22,6 +22,7 @@ describe('ComDB', function () {
   })
 
   it('should encrypt writes', function () {
+    this.timeout(4 * 1000) // sometimes runs long
     return this.db.post({ hello: 'world' }).then(({ id }) => {
       return this.db.get(id)
     }).then((doc) => {
@@ -78,7 +79,7 @@ describe('ComDB', function () {
         return Promise.all([
           this.db.allDocs(opts),
           this.db2.allDocs(opts)
-        ]).then(([ results1, results2 ]) => {
+        ]).then(([results1, results2]) => {
           assert.strictEqual(results1.total_rows, results2.total_rows)
           const doc1 = results1.rows[0].doc
           const doc2 = results2.rows[0].doc
