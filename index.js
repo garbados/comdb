@@ -5,11 +5,13 @@ const assert = require('assert')
 const Crypt = require('./lib/crypt')
 
 function cbify (promise, callback) {
-  return !callback ? promise : promise.then((result) => {
-    return callback(null, result || [])
-  }).catch((error) => {
-    return callback(error)
-  })
+  return !callback
+    ? promise
+    : promise.then((result) => {
+      return callback(null, result || [])
+    }).catch((error) => {
+      return callback(error)
+    })
 }
 
 function processEncryptedChange (decrypted, encrypted, ids = []) {
