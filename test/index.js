@@ -52,6 +52,32 @@ describe('ComDB', function () {
     assert(caught, 'Document was not deleted!')
   })
 
+  describe('destroy', function () {
+    before(function () {
+      this.db_destroyable_1 = new PouchDB('test-destroy-1')
+      this.db_destroyable_2 = new PouchDB('test-destroy-2')
+      this.db_destroyable_1.setPassword('goodpassword')
+      this.db_destroyable_2.setPassword('goodpassword')
+    })
+
+    after(async function () {
+      await this.db_destroyable_1._encrypted.destroy()
+      await this.db_destroyable_2.destroy({ unencrypted_only: true })
+    })
+
+    it('should optionally not destroy the encrypted copy', async function () {
+      await this.db_destroyable_1.destroy({ unencrypted_only: true })
+      assert.equal(this.db_destroyable_1._encrypted._destroyed, undefined)
+      assert.equal(this.db_destroyable_1._destroyed, true)
+    })
+
+    it('should optionally not destroy the unencrypted copy', async function () {
+      await this.db_destroyable_2.destroy({ encrypted_only: true })
+      assert.equal(this.db_destroyable_2._encrypted._destroyed, true)
+      assert.equal(this.db_destroyable_2._destroyed, undefined)
+    })
+  })
+
   describe('replication', function () {
     before(function () {
       this.name2 = [this.name, '2'].join('-')

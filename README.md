@@ -160,7 +160,10 @@ Returns the document as an object.
 
 ### `db.destroy([opts], callback)`
 
-ComDB wraps PouchDB's database destruction method so that both the encrypted and decrypted databases are destroyed.
+ComDB wraps PouchDB's database destruction method so that both the encrypted and decrypted databases are destroyed. ComDB adds two options to the method:
+
+- `encrypted_only`: Destroy only the encrypted database. This is useful when a backup has become compromised and you need to burn it.
+- `unencrypted_only`: Destroy only the unencrypted database. This is useful if you are using a remote encrypted backup and want to burn the local device so you can restore from backup on a fresh one.
 
 Original: [db.destroy](https://pouchdb.com/api.html#delete_database)
 

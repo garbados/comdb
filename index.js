@@ -143,8 +143,10 @@ module.exports = function (PouchDB) {
   // destroy wrapper that destroys both the encrypted and decrypted DBs
   PouchDB.prototype.destroy = function (opts = {}, callback) {
     let promise
-    if (!this._encrypted) {
+    if (!this._encrypted || opts.unencrypted_only) {
       promise = destroy.call(this, opts)
+    } else if (opts.encrypted_only) {
+      promise = destroy.call(this._encrypted, opts)
     } else {
       promise = Promise.all([
         destroy.call(this._encrypted, opts),
