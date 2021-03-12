@@ -21,44 +21,35 @@ describe('ComDB', function () {
     return this.db.destroy()
   })
 
-  it('should encrypt writes', function () {
+  it('should encrypt writes', async function () {
     this.timeout(4 * 1000) // sometimes runs long
-    return this.db.post({ hello: 'world' }).then(({ id }) => {
-      return this.db.get(id)
-    }).then((doc) => {
-      return this.db._encrypted.allDocs({ include_docs: true }).then(({ rows }) => {
-        const { payload } = rows[0].doc
-        return this.db.decrypt(payload)
-      }).then((plainDoc) => {
-        assert(isEqual(doc, plainDoc), 'Unencrypted and decrypted documents differ.')
-      })
-    })
+    const { id } = await this.db.post({ hello: 'world' })
+    const doc = await this.db.get(id)
+    const { rows } = await this.db._encrypted.allDocs({ include_docs: true })
+    const { payload } = rows[0].doc
+    const plainDoc = await this.db.decrypt(payload)
+    assert(isEqual(doc, plainDoc), 'Unencrypted and decrypted documents differ.')
   })
 
-  it('should decrypt and handle deletions', function () {
-    // this test fails for reasons i do not understand
-    return this.db.post({ hello: 'galaxy' }).then(({ id }) => {
-      return this.db.get(id)
-    }).then((doc) => {
-      doc._deleted = true
-      return this.db.encrypt(doc).then((payload) => {
-        return this.db._encrypted.post({ payload }).then(({ id }) => {
-          return this.db._encrypted.get(id)
-        }).then(({ payload }) => {
-          return this.db.decrypt(payload)
-        }).then((plainDoc) => {
-          assert.strictEqual(plainDoc._deleted, true)
-        })
-      }).then(() => {
-        let caught = false
-        return this.db.get(doc._id).catch((error) => {
-          assert.strictEqual(error.name, 'not_found')
-          caught = true
-        }).then((doc) => {
-          assert(caught, 'Document was not deleted!')
-        })
-      })
-    })
+  it('should decrypt and handle deletions', async function () {
+    // delete a document by inserting a payload into the encrypted db
+    const { id } = await this.db.post({ hello: 'galaxy' })
+    const doc = await this.db.get(id)
+    doc._deleted = true
+    const payload = await this.db.encrypt(doc)
+    const { id: encryptedId } = await this.db._encrypted.post({ payload })
+    const encryptedDoc = await this.db._encrypted.get(encryptedId)
+    const plainDoc = await this.db.decrypt(encryptedDoc.payload)
+    assert.strictEqual(plainDoc._deleted, true)
+    let caught = false
+    // now test that it was deleted in the decrypted copy
+    try {
+      await this.db.get(doc._id)
+    } catch (error) {
+      assert.strictEqual(error.name, 'not_found')
+      caught = true
+    }
+    assert(caught, 'Document was not deleted!')
   })
 
   describe('replication', function () {
@@ -86,6 +77,28 @@ describe('ComDB', function () {
           assert(isEqual(doc1, doc2))
         })
       })
+    })
+  })
+
+  describe('issues', function () {
+    it('should handle destruction without a set password', async function () {
+      const db3 = new PouchDB('.test-destruction')
+      await db3.destroy()
+      assert(true)
+    })
+
+    it('should handle calls to bulkDocs', async function () {
+      const docs = []
+      const k = 10
+      for (let i = 0; i < k; i++) {
+        docs.push({
+          _id: String(Math.floor(Math.random() * Date.now())),
+          a: Math.random(),
+          b: Math.random() * Date.now()
+        })
+      }
+      const result = await this.db.bulkDocs({ docs })
+      assert.equal(result.length, k)
     })
   })
 })
