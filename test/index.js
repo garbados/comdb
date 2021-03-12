@@ -22,7 +22,6 @@ describe('ComDB', function () {
   })
 
   it('should encrypt writes', async function () {
-    this.timeout(4 * 1000) // sometimes runs long
     const { id } = await this.db.post({ hello: 'world' })
     const doc = await this.db.get(id)
     const { rows } = await this.db._encrypted.allDocs({ include_docs: true })

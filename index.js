@@ -28,7 +28,7 @@ module.exports = function (PouchDB) {
       const newDoc = await decrypted.decrypt(payload)
       let change
       try {
-        const doc = decrypted.get(newDoc._id)
+        const doc = await decrypted.get(newDoc._id)
         change = isEqual(newDoc, doc) ? undefined : newDoc
       } catch (err) {
         if (err.name === 'not_found') {
@@ -56,7 +56,7 @@ module.exports = function (PouchDB) {
       const doc = await decrypted.get(id)
       const payload = await decrypted.encrypt(doc)
       const encryptedDoc = { payload }
-      const latestChanges = await encrypted.changes({ limit: 1, doc_ids: [id] })
+      const latestChanges = await encrypted.changes({ limit: 1, include_docs: true })
       if (latestChanges.results && latestChanges.results.length) {
         const latestChange = latestChanges.results[0].doc
         if (payload !== latestChange.payload) {
@@ -118,12 +118,7 @@ module.exports = function (PouchDB) {
     }
     const processChange = processDecryptedChange.bind(null, this, this._encrypted)
     const results = await bulkDocs.call(this, docs, opts)
-    const ids = results
-      .map(({ id }) => { return id })
-      .filter((id) => {
-        const d = ((docs && docs.docs) || docs)
-        return !d.map(({ _id }) => { return _id }).includes(id)
-      })
+    const ids = results.map(({ id }) => { return id })
     await processChange(ids)
     const promise = Promise.resolve(results)
     return cbify(promise, callback)
