@@ -8,67 +8,10 @@ function cbify (promise, callback) {
   return !callback
     ? promise
     : promise.then((result) => {
-      return callback(null, result || [])
+      return callback(null, result)
     }).catch((error) => {
       return callback(error)
     })
-}
-
-function processEncryptedChange (decrypted, encrypted, ids = []) {
-  if (ids.length === 0) return Promise.resolve()
-  const promises = ids.map((id) => {
-    return encrypted.get(id).then(({ payload }) => {
-      return decrypted.decrypt(payload)
-    }).then((newDoc) => {
-      return decrypted.get(newDoc._id).then((doc) => {
-        return isEqual(newDoc, doc) ? undefined : newDoc
-      }).catch((error) => {
-        if (error.name === 'not_found') {
-          return newDoc
-        } else {
-          return Promise.reject(error)
-        }
-      })
-    })
-  })
-  return Promise.all(promises).then((results) => {
-    const decryptedDocs = results.filter((x) => { return !!x })
-    const deletedDocs = decryptedDocs.filter((doc) => {
-      return doc._deleted
-    })
-    return Promise.all([
-      decrypted.bulkDocs(decryptedDocs, { new_edits: false }),
-      decrypted.bulkDocs(deletedDocs)
-    ]).then(([results1, results2]) => {
-      return results1.concat(results2)
-    })
-  })
-}
-
-function processDecryptedChange (decrypted, encrypted, ids) {
-  if (ids.length === 0) return Promise.resolve()
-  const promises = ids.map((id) => {
-    return decrypted.get(id).then((doc) => {
-      return decrypted.encrypt(doc)
-    }).then((payload) => {
-      const encryptedDoc = { payload }
-      return encrypted.changes({
-        include_docs: true,
-        limit: 1
-      }).then((result) => {
-        if (result.results && result.results.length) {
-          if (payload !== result.results[0].doc.payload) {
-            return encryptedDoc
-          }
-        } else {
-          return encryptedDoc
-        }
-      })
-    })
-  })
-  return Promise.all(promises).then((encryptedDocs) => {
-    return encrypted.bulkDocs(encryptedDocs)
-  })
 }
 
 module.exports = function (PouchDB) {
@@ -76,6 +19,55 @@ module.exports = function (PouchDB) {
   const destroy = PouchDB.prototype.destroy
   const bulkDocs = PouchDB.prototype.bulkDocs
   const replicate = PouchDB.replicate
+  // private helpers
+  async function processEncryptedChange (decrypted, encrypted, ids = []) {
+    if (ids.length === 0) { return }
+    const changes = []
+    for (const id of ids) {
+      const { payload } = await encrypted.get(id)
+      const newDoc = await decrypted.decrypt(payload)
+      let change
+      try {
+        const doc = decrypted.get(newDoc._id)
+        change = isEqual(newDoc, doc) ? undefined : newDoc
+      } catch (err) {
+        if (err.name === 'not_found') {
+          change = newDoc
+        } else {
+          throw err
+        }
+      }
+      changes.push(change)
+    }
+    const decryptedDocs = changes.filter(x => !!x)
+    const deletedDocs = changes.filter(doc => !!doc._deleted)
+    return Promise.all([
+      bulkDocs.call(decrypted, decryptedDocs, { new_edits: false }),
+      bulkDocs.call(decrypted, deletedDocs)
+    ]).then(([results1, results2]) => {
+      return [...results1, ...results2]
+    })
+  }
+
+  async function processDecryptedChange (decrypted, encrypted, ids) {
+    if (ids.length === 0) { return }
+    const encryptedDocs = []
+    for (const id of ids) {
+      const doc = await decrypted.get(id)
+      const payload = await decrypted.encrypt(doc)
+      const encryptedDoc = { payload }
+      const latestChanges = await encrypted.changes({ limit: 1, doc_ids: [id] })
+      if (latestChanges.results && latestChanges.results.length) {
+        const latestChange = latestChanges.results[0].doc
+        if (payload !== latestChange.payload) {
+          encryptedDocs.push(encryptedDoc)
+        }
+      } else {
+        encryptedDocs.push(encryptedDoc)
+      }
+    }
+    return bulkDocs.call(encrypted, encryptedDocs)
+  }
   // replication wrapper; handles ComDB instances transparently
   PouchDB.replicate = function (source, target, opts = {}, callback) {
     if (source._encrypted) source = source._encrypted
@@ -115,17 +107,25 @@ module.exports = function (PouchDB) {
   }
   // decrypted bulkDocs wrapper
   // - encrypts docs and maybe saves them to the encrypted db
-  PouchDB.prototype.bulkDocs = function (docs, opts = {}, callback) {
+  PouchDB.prototype.bulkDocs = async function (docs, opts = {}, callback) {
+    if (typeof opts === 'function') {
+      opts = {}
+      callback = opts
+    }
+    if (!this._crypt) {
+      const promise = bulkDocs.call(this, docs, opts)
+      return cbify(promise, callback)
+    }
     const processChange = processDecryptedChange.bind(null, this, this._encrypted)
-    const promise = bulkDocs.call(this, docs, opts).then((results) => {
-      const ids = results.map(({ id }) => { return id }).filter((id) => {
+    const results = await bulkDocs.call(this, docs, opts)
+    const ids = results
+      .map(({ id }) => { return id })
+      .filter((id) => {
         const d = ((docs && docs.docs) || docs)
         return !d.map(({ _id }) => { return _id }).includes(id)
       })
-      return processChange(ids).then(() => {
-        return results
-      })
-    })
+    await processChange(ids)
+    const promise = Promise.resolve(results)
     return cbify(promise, callback)
   }
   // encryption convenience function
@@ -143,8 +143,10 @@ module.exports = function (PouchDB) {
   // destroy wrapper that destroys both the encrypted and decrypted DBs
   PouchDB.prototype.destroy = function (opts = {}, callback) {
     let promise
-    if (!this._encrypted) {
-      promise = destroy.call(this)
+    if (!this._encrypted || opts.unencrypted_only) {
+      promise = destroy.call(this, opts)
+    } else if (opts.encrypted_only) {
+      promise = destroy.call(this._encrypted, opts)
     } else {
       promise = Promise.all([
         destroy.call(this._encrypted, opts),
