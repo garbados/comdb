@@ -5,6 +5,7 @@ const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const PouchDB = require('pouchdb')
 const ComDB = require('..')
+const Crypt = require('../lib/crypt')
 
 describe('ComDB', function () {
   before(function () {
@@ -49,6 +50,42 @@ describe('ComDB', function () {
       caught = true
     }
     assert(caught, 'Document was not deleted!')
+  })
+
+  describe('offline recovery', function () {
+    before(function () {
+      this.offline = {
+        decrypted: 'offline-decrypted',
+        encrypted: 'offline-encrypted'
+      }
+      this.crypt = new Crypt(this.password)
+      this.dbs = {
+        decrypted: new PouchDB(this.offline.decrypted),
+        encrypted: new PouchDB(this.offline.encrypted)
+      }
+    })
+
+    after(async function () {
+      await this.dbs.decrypted.destroy({ unencrypted_only: true })
+      await this.dbs.encrypted.destroy()
+    })
+
+    it('should process encrypted writes that happened offline', async function () {
+      // 1. write to encrypted db
+      const payload = await this.crypt.encrypt({
+        _id: 'hello',
+        _rev: '1-15f65339921e497348be384867bb940f',
+        hello: 'world'
+      })
+      await this.dbs.encrypted.post({ payload })
+      // 2. hook up decrypted db to encrypted
+      this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
+      // 3. load docs from encrypted db
+      await this.dbs.decrypted.loadEncrypted()
+      // check for doc in db
+      const doc = await this.dbs.decrypted.get('hello')
+      assert.equal(doc.hello, 'world')
+    })
   })
 
   describe('destroy', function () {

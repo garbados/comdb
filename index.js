@@ -152,4 +152,18 @@ module.exports = function (PouchDB) {
     }
     return cbify(promise, callback)
   }
+  // load from encrypted db, to catch up to offline writes
+  PouchDB.prototype.loadEncrypted = async function (callback) {
+    const processChange = processEncryptedChange.bind(null, this, this._encrypted)
+    const changes = this._encrypted.changes({ return_docs: false })
+    const uniqIds = {}
+    changes.on('change', (change) => { uniqIds[change.id] = true })
+    await new Promise((resolve, reject) => {
+      changes.on('complete', resolve)
+      changes.on('error', reject)
+    })
+    const ids = Object.keys(uniqIds)
+    const promise = processChange(ids)
+    return cbify(promise, callback)
+  }
 }

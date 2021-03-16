@@ -31,7 +31,7 @@ db.post({
 
 Now you can check the CouchDB for the encrypted information:
 
-```bash
+```
 $ curl "$COUCH_URL/FALGSC/_all_docs?include_docs=true" | jq .
 {
   "total_rows": 1,
@@ -173,6 +173,20 @@ ComDB wraps PouchDB's database destruction method so that both the encrypted and
 - `unencrypted_only`: Destroy only the unencrypted database. This is useful if you are using a remote encrypted backup and want to burn the local device so you can restore from backup on a fresh one.
 
 Original: [db.destroy](https://pouchdb.com/api.html#delete_database)
+
+### `db.loadEncrypted(callback)`
+
+Load changes from the encrypted database into the decrypted one. Useful if you are restoring from backup:
+
+```javascript
+// in-memory database is wiped on restart and so needs to be repopulated
+const db = new PouchDB('local', { adapter: 'memory' })
+// the encrypted DB lives on remote disk, so we can load docs from it
+db.setPassword(PASSWORD, { name: REMOTE_URL })
+db.loadEncrypted().then(() => {
+  // all encrypted docs have been loaded into the decrypted database
+})
+```
 
 ## Development
 
