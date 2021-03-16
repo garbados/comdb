@@ -208,7 +208,9 @@ db.loadEncrypted().then(() => {
 You can then replicate your encrypted database with a remote CouchDB installation to ensure you can restore your data even if your device is compromised:
 
 ```javascript
+// create remote db connection
 const remoteDb = new PouchDB('http://...') // CouchDB connection string
+// sync local encrypted with remote
 const sync = PouchDB.sync(db, remoteDb, { live: true, retry: true })
 ```
 
