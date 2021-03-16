@@ -70,8 +70,10 @@ module.exports = function (PouchDB) {
   }
   // replication wrapper; handles ComDB instances transparently
   PouchDB.replicate = function (source, target, opts = {}, callback) {
-    if (source._encrypted) source = source._encrypted
-    if (target._encrypted) target = target._encrypted
+    if (opts.comdb !== false) {
+      if (source._encrypted) source = source._encrypted
+      if (target._encrypted) target = target._encrypted
+    }
     const promise = replicate(source, target, opts)
     return cbify(promise, callback)
   }
