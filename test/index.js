@@ -103,6 +103,21 @@ describe('ComDB', function () {
         })
       })
     })
+
+    it('should perform normal replication ok', async function () {
+      return this.db.replicate.to(this.db2, { comdb: false }).then(() => {
+        const opts = { include_docs: true }
+        return Promise.all([
+          this.db.allDocs(opts),
+          this.db2.allDocs(opts)
+        ]).then(([results1, results2]) => {
+          assert.strictEqual(results1.total_rows, results2.total_rows)
+          const doc1 = results1.rows[0].doc
+          const doc2 = results2.rows[0].doc
+          assert(isEqual(doc1, doc2))
+        })
+      })
+    })
   })
 
   describe('issues', function () {

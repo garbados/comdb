@@ -114,6 +114,13 @@ ComDB adds and extends several methods to PouchDB and any instances of it:
 
 ComDB wraps PouchDB's replicator to check if either the source or the target have an `_encrypted` attribute, reflecting that they are ComDB instances. If it finds the attribute, it changes the parameter to use the encrypted database rather than its decrypted one. If neither the source or target is a ComDB instance, the replicator behaves as normal.
 
+You can also disable this functionality by passing `comdb: false` in the `opts`
+parameter:
+
+```javascript
+PouchDB.replicate(db1, db2, { comdb: false })
+```
+
 The instance methods `db.replicate.to` and `db.replicate.from` automatically use `PouchDB.replicate` so that wrapping the static method causes the instance methods to exhibit the same behavior.
 
 Original: [`PouchDB.replicate`](https://pouchdb.com/api.html#replication)
