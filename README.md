@@ -188,6 +188,38 @@ db.loadEncrypted().then(() => {
 })
 ```
 
+## Recipe: End-to-End Encryption
+
+ComDB can instrument end-to-end encryption of application data using [pouchdb-adapter-memory](https://www.npmjs.com/package/pouchdb-adapter-memory), so that documents are only decrypted in memory while everything on disk remains encrypted.
+
+Consider this setup:
+
+```javascript
+// in-memory database is wiped on restart and so needs to be repopulated
+const db = new PouchDB('local', { adapter: 'memory' })
+// the encrypted copy lives on local disk, so we can load docs from it
+db.setPassword(PASSWORD)
+// repopulate database from encrypted local copy
+db.loadEncrypted().then(() => {
+  // decrypted database is up to date, app is ready to go
+})
+```
+
+You can then replicate your encrypted database with a remote CouchDB installation to ensure you can restore your data even if your device is compromised:
+
+```javascript
+const remoteDb = new PouchDB('http://...') // CouchDB connection string
+const sync = PouchDB.sync(db, remoteDb, { live: true, retry: true })
+```
+
+Now you'll have three copies of your data:
+
+- One in local memory, decrypted.
+- One on local disk, encrypted.
+- One on remote disk, encrypted.
+
+The user syncs local disk with remote disk to have a remote encrypted backup, so the user can restore their info when switching devices. The local disk populates the in-memory database on startup, so that the only data that remains on disk remains encrypted. The user retains all their information locally, so they do not require network connectivity to use the app normally.
+
 ## Development
 
 To hack on ComDB, check out the [issues page](https://github.com/garbados/comdb/issues). To submit a patch, [submit a pull request](https://github.com/garbados/comdb/pulls).
