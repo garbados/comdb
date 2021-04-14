@@ -128,14 +128,14 @@ module.exports = function (PouchDB) {
   // encryption convenience function
   PouchDB.prototype.encrypt = function (doc) {
     assert(this._crypt, 'Must set a password with `.setPassword(password)` before encrypting documents.')
-    return this._crypt.encrypt(doc)
+    return this._crypt.encrypt(JSON.stringify(doc))
   }
   // decryption convenience function; takes the output of .encrypt
-  PouchDB.prototype.decrypt = function (payload) {
+  PouchDB.prototype.decrypt = async function (payload) {
     assert(this._crypt, 'Must set a password with `.setPassword(password)` before decrypting documents.')
-    return this._crypt.decrypt(payload).then((plaintext) => {
-      return JSON.parse(plaintext)
-    })
+    const plaintext = await this._crypt.decrypt(payload)
+    const doc = JSON.parse(plaintext)
+    return doc
   }
   // destroy wrapper that destroys both the encrypted and decrypted DBs
   PouchDB.prototype.destroy = function (opts = {}, callback) {

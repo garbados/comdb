@@ -72,11 +72,11 @@ describe('ComDB', function () {
 
     it('should process encrypted writes that happened offline', async function () {
       // 1. write to encrypted db
-      const payload = await this.crypt.encrypt({
+      const payload = await this.crypt.encrypt(JSON.stringify({
         _id: 'hello',
         _rev: '1-15f65339921e497348be384867bb940f',
         hello: 'world'
-      })
+      }))
       await this.dbs.encrypted.post({ payload })
       // 2. hook up decrypted db to encrypted
       this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
