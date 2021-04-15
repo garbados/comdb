@@ -16,6 +16,20 @@ describe('crypt', function () {
     assert.strictEqual(decryptext, PLAINTEXT)
   })
 
+  it('should fail to decrypt ok', async function () {
+    const crypt = new Crypt(PASSWORD)
+    const crypt2 = new Crypt(PASSWORD + 'a')
+    const ciphertext = await crypt.encrypt(PLAINTEXT)
+    let failed = false
+    try {
+      await crypt2.decrypt(ciphertext)
+    } catch (e) {
+      assert.equal(e.message, 'Could not decrypt!')
+      failed = true
+    }
+    assert(failed)
+  })
+
   it(`should do the crypto dance ${TEST_LENGTH} times`, async function () {
     this.timeout(TEST_LENGTH) // assume each op will take no more than 1ms
     const crypt = new Crypt(PASSWORD)
