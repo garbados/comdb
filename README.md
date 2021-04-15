@@ -6,7 +6,7 @@
 [![NPM Version](https://img.shields.io/npm/v/comdb.svg?style=flat-square)](https://www.npmjs.com/package/comdb)
 [![JS Standard Style](https://img.shields.io/badge/code%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/feross/standard)
 
-A [PouchDB](https://pouchdb.com/) plugin that transparently encrypts and decrypts its data so that only encrypted data is sent during replication, while encrypted data that you receive is automatically decrypted.
+A [PouchDB](https://pouchdb.com/) plugin that transparently encrypts and decrypts its data so that only encrypted data is sent during replication, while encrypted data that you receive is automatically decrypted. Uses [TweetNaCl](https://www.npmjs.com/package/tweetnacl) for cryptography.
 
 As an example, here's what happens when you replicate data to a [CouchDB](https://couchdb.apache.org/) cluster:
 
@@ -134,14 +134,6 @@ Returns nothing.
 - `password`: A string used to encrypt and decrypt documents.
 - `opts.name`: A name or connection string for the encrypted database.
 - `opts.opts`: An options object passed to the encrypted database's constructor. Use this to pass any options accepted by [PouchDB's constructor](https://pouchdb.com/api.html#create_database).
-- `opts.crypt`: Options for ComDB's crypto tooling.
-- `opts.crypt.algorithmName`: Name of the encryption algorithm.
-- `opts.crypt.algorithmNonceSize`: Size of generated nonces.
-- `opts.crypt.algorithmTagSize`: Size of the auth tags used.
-- `opts.crypt.algorithmKeySize`: Size of generated keys.
-- `opts.crypt.pbkdf2Name`: Name of the hashing algorithm.
-- `opts.crypt.pbkdf2SaltSize`: Size of generates salts.
-- `opts.crypt.pbkdf2Iterations`: Number of iterations to hash data.
 
 ### `db.bulkDocs(docs, [opts], [callback])`
 
