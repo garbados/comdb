@@ -12,10 +12,8 @@ const {
   USE_COUCH
 } = process.env
 
-async function sleep (n = 5) {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 5)
-  })
+async function sleep (n = 20) {
+  await new Promise((resolve) => { setTimeout(resolve, n) })
 }
 
 describe('ComDB', function () {
