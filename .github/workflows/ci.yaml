@@ -1,0 +1,58 @@
+---
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [12,14,16]
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - run: npm ci
+
+      # install chromium manually
+      - run: node node_modules/puppeteer/install.js
+
+      - name: release testing
+        run: npm run release
+
+      - name: produce coverage report
+        run: npm run coveralls
+
+      - name: report coverage to coveralls
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ github.token }}
+          path-to-lcov: ./lcov.info
+          flag-name: run-${{ matrix.os }}-${{ matrix.node }}
+          parallel: true
+  finish:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+    - name: Coveralls Finished
+      uses: coverallsapp/github-action@master
+      with:
+        github-token: ${{ secrets.github_token }}
+        parallel-finished: true
+        path-to-lcov: ./lcov.info

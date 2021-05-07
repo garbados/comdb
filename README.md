@@ -1,6 +1,6 @@
 # ComDB
 
-[![Build Status](https://img.shields.io/travis/garbados/comdb/master.svg?style=flat-square)](https://travis-ci.org/garbados/comdb)
+[![CI](https://github.com/garbados/comdb/actions/workflows/ci.yaml/badge.svg)](https://github.com/garbados/comdb/actions/workflows/ci.yaml)
 [![Coverage Status](https://img.shields.io/coveralls/github/garbados/comdb/master.svg?style=flat-square)](https://coveralls.io/github/garbados/comdb?branch=master)
 [![Stability](https://img.shields.io/badge/stability-experimental-orange.svg?style=flat-square)](https://nodejs.org/api/documentation.html#documentation_stability_index)
 [![NPM Version](https://img.shields.io/npm/v/comdb.svg?style=flat-square)](https://www.npmjs.com/package/comdb)
