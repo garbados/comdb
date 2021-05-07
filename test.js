@@ -4,8 +4,19 @@
 const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const PouchDB = require('pouchdb')
-const ComDB = require('..')
-const Crypt = require('../lib/crypt')
+const ComDB = require('.')
+const Crypt = require('garbados-crypt')
+
+const {
+  COUCH_URL,
+  USE_COUCH
+} = process.env
+
+async function sleep (n = 5) {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 5)
+  })
+}
 
 describe('ComDB', function () {
   before(function () {
@@ -14,7 +25,7 @@ describe('ComDB', function () {
     this.name = '.comdb-test'
     this.db = new PouchDB(this.name)
     this.db.setPassword(this.password, {
-      name: process.env.COUCH_URL && [process.env.COUCH_URL, 'comdb-test'].join('/')
+      name: COUCH_URL && USE_COUCH && `${COUCH_URL}/comdb-test`
     })
   })
 
@@ -25,9 +36,11 @@ describe('ComDB', function () {
   it('should encrypt writes', async function () {
     const { id } = await this.db.post({ hello: 'world' })
     const doc = await this.db.get(id)
+    await sleep() // the encrypted db catches up asynchronously
     const { rows } = await this.db._encrypted.allDocs({ include_docs: true })
     const { payload } = rows[0].doc
-    const plainDoc = await this.db.decrypt(payload)
+    const json = await this.db._crypt.decrypt(payload)
+    const plainDoc = JSON.parse(json)
     assert(isEqual(doc, plainDoc), 'Unencrypted and decrypted documents differ.')
   })
 
@@ -36,10 +49,11 @@ describe('ComDB', function () {
     const { id } = await this.db.post({ hello: 'galaxy' })
     const doc = await this.db.get(id)
     doc._deleted = true
-    const payload = await this.db.encrypt(doc)
-    const { id: encryptedId } = await this.db._encrypted.post({ payload })
+    const payload = await this.db._crypt.encrypt(JSON.stringify(doc))
+    const { id: encryptedId } = await this.db._encrypted.post({ payload, isEncrypted: true })
     const encryptedDoc = await this.db._encrypted.get(encryptedId)
-    const plainDoc = await this.db.decrypt(encryptedDoc.payload)
+    const json = await this.db._crypt.decrypt(encryptedDoc.payload)
+    const plainDoc = JSON.parse(json)
     assert.strictEqual(plainDoc._deleted, true)
     let caught = false
     // now test that it was deleted in the decrypted copy
@@ -77,7 +91,7 @@ describe('ComDB', function () {
         _rev: '1-15f65339921e497348be384867bb940f',
         hello: 'world'
       }))
-      await this.dbs.encrypted.post({ payload })
+      await this.dbs.encrypted.post({ payload, isEncrypted: true })
       // 2. hook up decrypted db to encrypted
       this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
       // 3. load docs from encrypted db
@@ -126,34 +140,26 @@ describe('ComDB', function () {
       return this.db2.destroy()
     })
 
-    it('should restore data from an encrypted backup', function () {
-      return this.db.replicate.to(this.db2).then(() => {
-        const opts = { include_docs: true }
-        return Promise.all([
-          this.db.allDocs(opts),
-          this.db2.allDocs(opts)
-        ]).then(([results1, results2]) => {
-          assert.strictEqual(results1.total_rows, results2.total_rows)
-          const doc1 = results1.rows[0].doc
-          const doc2 = results2.rows[0].doc
-          assert(isEqual(doc1, doc2))
-        })
-      })
+    it('should restore data from an encrypted backup', async function () {
+      await this.db.replicate.to(this.db2)
+      const opts = { include_docs: true }
+      const results1 = await this.db.allDocs(opts)
+      const results2 = await this.db2.allDocs(opts)
+      assert.strictEqual(results1.total_rows, results2.total_rows)
+      const doc1 = results1.rows[0].doc
+      const doc2 = results2.rows[0].doc
+      assert(isEqual(doc1, doc2))
     })
 
     it('should perform normal replication ok', async function () {
-      return this.db.replicate.to(this.db2, { comdb: false }).then(() => {
-        const opts = { include_docs: true }
-        return Promise.all([
-          this.db.allDocs(opts),
-          this.db2.allDocs(opts)
-        ]).then(([results1, results2]) => {
-          assert.strictEqual(results1.total_rows, results2.total_rows)
-          const doc1 = results1.rows[0].doc
-          const doc2 = results2.rows[0].doc
-          assert(isEqual(doc1, doc2))
-        })
-      })
+      await this.db.replicate.to(this.db2, { comdb: false })
+      const opts = { include_docs: true }
+      const results1 = await this.db.allDocs(opts)
+      const results2 = await this.db2.allDocs(opts)
+      assert.strictEqual(results1.total_rows, results2.total_rows)
+      const doc1 = results1.rows[0].doc
+      const doc2 = results2.rows[0].doc
+      assert(isEqual(doc1, doc2))
     })
   })
 

@@ -1,73 +1,37 @@
 'use strict'
 
-const isEqual = require('lodash.isequal')
-const assert = require('assert')
-const Crypt = require('./lib/crypt')
+const Crypt = require('garbados-crypt')
+const transform = require('transform-pouch')
+const createHash = require('create-hash')
+
+const PASSWORD_REQUIRED = 'You must provide a password.'
+const PASSWORD_NOT_STRING = 'Password must be a string.'
+
+const HASH_ALGO = 'sha256'
+
+async function hash (payload) {
+  const hash = createHash(HASH_ALGO)
+  hash.update(payload)
+  return hash.digest('hex')
+}
 
 function cbify (promise, callback) {
   return !callback
-    ? promise
-    : promise.then((result) => {
-      return callback(null, result)
-    }).catch((error) => {
-      return callback(error)
-    })
+    ? promise // no callback. just return the promise.
+    : promise // or, delegate to the callback on result and error
+      .then((result) => { return callback(null, result) })
+      .catch((error) => { return callback(error) })
 }
 
 module.exports = function (PouchDB) {
-  // save originals
-  const destroy = PouchDB.prototype.destroy
-  const bulkDocs = PouchDB.prototype.bulkDocs
-  const replicate = PouchDB.replicate
-  // private helpers
-  async function processEncryptedChange (decrypted, encrypted, ids = []) {
-    if (ids.length === 0) { return }
-    const changes = []
-    for (const id of ids) {
-      const { payload } = await encrypted.get(id)
-      const newDoc = await decrypted.decrypt(payload)
-      let change
-      try {
-        const doc = await decrypted.get(newDoc._id)
-        change = isEqual(newDoc, doc) ? undefined : newDoc
-      } catch (err) {
-        if (err.name === 'not_found') {
-          change = newDoc
-        } else {
-          throw err
-        }
-      }
-      changes.push(change)
-    }
-    const decryptedDocs = changes.filter(x => !!x)
-    const deletedDocs = changes.filter(doc => !!doc._deleted)
-    return Promise.all([
-      bulkDocs.call(decrypted, decryptedDocs, { new_edits: false }),
-      bulkDocs.call(decrypted, deletedDocs)
-    ]).then(([results1, results2]) => {
-      return [...results1, ...results2]
-    })
-  }
+  // apply plugins
+  PouchDB.plugin(transform)
 
-  async function processDecryptedChange (decrypted, encrypted, ids) {
-    if (ids.length === 0) { return }
-    const encryptedDocs = []
-    for (const id of ids) {
-      const doc = await decrypted.get(id)
-      const payload = await decrypted.encrypt(doc)
-      const encryptedDoc = { payload }
-      const latestChanges = await encrypted.changes({ limit: 1, include_docs: true })
-      if (latestChanges.results && latestChanges.results.length) {
-        const latestChange = latestChanges.results[0].doc
-        if (payload !== latestChange.payload) {
-          encryptedDocs.push(encryptedDoc)
-        }
-      } else {
-        encryptedDocs.push(encryptedDoc)
-      }
-    }
-    return bulkDocs.call(encrypted, encryptedDocs)
-  }
+  // save originals
+  const close = PouchDB.prototype.close
+  const destroy = PouchDB.prototype.destroy
+  const replicate = PouchDB.replicate
+
   // replication wrapper; handles ComDB instances transparently
   PouchDB.replicate = function (source, target, opts = {}, callback) {
     if (opts.comdb !== false) {
@@ -77,65 +41,50 @@ module.exports = function (PouchDB) {
     const promise = replicate(source, target, opts)
     return cbify(promise, callback)
   }
+
   // setup function; must call before anything works
   PouchDB.prototype.setPassword = function (password, opts = {}) {
-    assert(password, 'You must provide a password.')
-    assert(typeof password === 'string', 'Password must be a string.')
-    const self = this
+    if (!password) { throw new Error(PASSWORD_REQUIRED) }
+    if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
     this._password = password
-    this._crypt = new Crypt(password, opts.crypt || {})
-    const encryptedName = opts.name || [this.name, 'encrypted'].join('-')
+    this._crypt = new Crypt(password)
+    const encryptedName = opts.name || `${this.name}-encrypted`
     const encryptedOpts = opts.opts || {}
     this._encrypted = new PouchDB(encryptedName, encryptedOpts)
-    // encrypted changes handler
-    // - decrypts docs and maybe saves them to the decrypted db
-    this._encrypted.bulkDocs = function (docs, opts = {}, callback) {
-      const processChange = processEncryptedChange.bind(null, self, this)
-      const promise = bulkDocs.call(this, docs, opts).then((results) => {
-        if (!results.length) {
-          // sometimes a non-failure elides results,
-          // particularly with new_edits:false
-          results = (docs && docs.docs) || docs
+    this._encrypted.transform({
+      // encrypt docs as they go in
+      incoming: async (doc) => {
+        // catch encrypted writes and apply them to the decrypted database
+        if (doc.isEncrypted) {
+          // first we decrypt the encrypted write
+          const json = await this._crypt.decrypt(doc.payload)
+          const decryptedDoc = JSON.parse(json)
+          // then we put it into the decrypted database
+          if (decryptedDoc._deleted) {
+            try { await this.remove(decryptedDoc) } catch { /* mimic new_edits: false */ }
+          } else {
+            await this.bulkDocs({ docs: [decryptedDoc], new_edits: false })
+          }
+          // finally we put it in the encrypted database unmolested
+          return doc
         }
-        const ids = results.map((result) => {
-          return result.id || result._id
-        })
-        return processChange(ids).then(() => {
-          return results
-        })
-      })
-      return cbify(promise, callback)
-    }
-  }
-  // decrypted bulkDocs wrapper
-  // - encrypts docs and maybe saves them to the encrypted db
-  PouchDB.prototype.bulkDocs = async function (docs, opts = {}, callback) {
-    if (typeof opts === 'function') {
-      opts = {}
-      callback = opts
-    }
-    if (!this._crypt) {
-      const promise = bulkDocs.call(this, docs, opts)
-      return cbify(promise, callback)
-    }
-    const processChange = processDecryptedChange.bind(null, this, this._encrypted)
-    const results = await bulkDocs.call(this, docs, opts)
-    const ids = results.map(({ id }) => { return id })
-    await processChange(ids)
-    const promise = Promise.resolve(results)
-    return cbify(promise, callback)
-  }
-  // encryption convenience function
-  PouchDB.prototype.encrypt = function (doc) {
-    assert(this._crypt, 'Must set a password with `.setPassword(password)` before encrypting documents.')
-    return this._crypt.encrypt(JSON.stringify(doc))
-  }
-  // decryption convenience function; takes the output of .encrypt
-  PouchDB.prototype.decrypt = async function (payload) {
-    assert(this._crypt, 'Must set a password with `.setPassword(password)` before decrypting documents.')
-    const plaintext = await this._crypt.decrypt(payload)
-    const doc = JSON.parse(plaintext)
-    return doc
+        // encrypt the doc
+        const json = JSON.stringify(doc)
+        const payload = await this._crypt.encrypt(json)
+        // get a deterministic ID
+        const id = await hash(payload)
+        return { _id: id, payload, isEncrypted: true }
+      }
+    })
+    this._encrypted._decrypted_changes = this.changes({
+      live: true,
+      descending: true,
+      include_docs: true
+    })
+    this._encrypted._decrypted_changes.on('change', ({ doc }) => {
+      if (this._encrypted._destroyed) { return }
+      return this._encrypted.put(doc)
+    })
   }
   // destroy wrapper that destroys both the encrypted and decrypted DBs
   PouchDB.prototype.destroy = function (opts = {}, callback) {
@@ -152,18 +101,21 @@ module.exports = function (PouchDB) {
     }
     return cbify(promise, callback)
   }
+
   // load from encrypted db, to catch up to offline writes
   PouchDB.prototype.loadEncrypted = async function (callback) {
-    const processChange = processEncryptedChange.bind(null, this, this._encrypted)
-    const changes = this._encrypted.changes({ return_docs: false })
-    const uniqIds = {}
-    changes.on('change', (change) => { uniqIds[change.id] = true })
+    const changes = this._encrypted.changes({ include_docs: true })
+    const promises = []
+    changes.on('change', async ({ doc: { payload } }) => {
+      const json = await this._crypt.decrypt(payload)
+      const doc = JSON.parse(json)
+      const promise = this.bulkDocs({ docs: [doc], new_edits: false })
+      promises.push(promise)
+    })
     await new Promise((resolve, reject) => {
       changes.on('complete', resolve)
       changes.on('error', reject)
     })
-    const ids = Object.keys(uniqIds)
-    const promise = processChange(ids)
-    return cbify(promise, callback)
+    return cbify(Promise.all(promises), callback)
   }
 }
