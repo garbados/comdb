@@ -2,3 +2,5 @@ node_modules/
 .nyc_output/
 .comdb-test
 .comdb-example/
+bundle.js
+bundle.min.js
