@@ -82,13 +82,7 @@ module.exports = function (PouchDB) {
     })
     this._encrypted._decrypted_changes.on('change', async ({ doc }) => {
       if (this._encrypted._destroyed) { return }
-      try {
-        await this._encrypted.put(doc)
-      } catch (error) {
-        if (error.status !== 409) {
-          throw error
-        }
-      }
+      try { await this._encrypted.put(doc) } catch { /* mimic new_edits:true */ }
     })
   }
   // destroy wrapper that destroys both the encrypted and decrypted DBs
