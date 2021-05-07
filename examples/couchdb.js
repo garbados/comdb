@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 
+const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const PouchDB = require('pouchdb')
 PouchDB.plugin(require('..'))
@@ -12,29 +13,30 @@ const password = 'scarcity-is-artificial'
 
 // create the database and set a password
 const db = new PouchDB('.comdb-example')
-console.log(`
+let db2
+
+Promise.resolve().then(async () => {
+  console.log(`
 When you set a password for ComDB, it creates an encrypted database
 that maps changes to and from your database. In this example, the
 encrypted database exists on a CouchDB instance, while the decrypted
 one lives on disk.
-`)
-db.setPassword(password, {
-  name: [COUCH_URL, 'comdb-example'].join('/')
-})
-// write a doc
-db.post({ greetings: 'hello world' }).then(({ id }) => {
-  return db.get(id)
-}).then((doc) => {
+  `)
+  db.setPassword(password, {
+    name: [COUCH_URL, 'comdb-example'].join('/')
+  })
+  const { id } = await db.post({ greetings: 'hello world' })
+  const doc = await db.get(id)
   console.log(`Documents are decrypted so that you can maintain indexes on them.
 The database's methods, except for replication, refer to the
 decrypted database. Here is a decrypted document retrieved by ID:
   `)
   assert.strictEqual(doc.greetings, 'hello world')
   console.log(doc)
-  // now let's check the encrypted db
   return db._encrypted.allDocs({ include_docs: true })
-}).then(({ rows }) => {
-  const { doc } = rows[0]
+}).then(async ({ rows }) => {
+  // reset the context so i can use var names like `doc` again
+  const doc = rows[0].doc
   // this doc lives in couchdb and is encrypted
   console.log(`
 ... and here is that document, encrypted!
@@ -42,40 +44,39 @@ This document lives in CouchDB such that your decrypted data never
 leaves the local machine.
   `)
   console.log(doc)
-  return db.decrypt(doc.payload)
+  const { id } = JSON.parse(await db._crypt.decrypt(doc.payload))
+  return db._encrypted.get(id)
 }).then((doc) => {
   console.log(`
 Here is the payload from that document, decrypted:
   `)
   console.log(doc)
-}).then(() => {
+}).then(async () => {
   console.log(`
 You can even create a different database and replicate encrypted
 data to it. As long as you provide the second instance with the same
 password, it will transparently decrypt replicated documents. Now I
 will replicate our first database to our second...
   `)
-  const db2 = new PouchDB('.comdb-example-2')
+  db2 = new PouchDB('.comdb-example-2')
   db2.setPassword(password)
-  return db.replicate.to(db2).then(() => {
-    return db2.allDocs({ include_docs: true, limit: 1 })
-  }).then(({ rows }) => {
-    const { doc } = rows[0]
-    console.log(`... replication successful!
+  await db.replicate.to(db2)
+  const { rows } = await db2.allDocs({ include_docs: true, limit: 1 })
+  const { doc } = rows[0]
+  const otherDoc = await db.get(doc._id)
+  assert(isEqual(doc, otherDoc))
+  console.log(`... replication successful!
 
 The second database, using the password, has automatically decrypted
 the remote documents. The encrypted version remains on the server,
 unchanged.
-    `)
-    console.log(doc)
-    console.log('')
-  }).then(() => {
-    return db2.destroy()
-  })
+  `)
 }).then(() => {
   console.log(`Cool, huh?
   `)
-  return db.destroy()
 }).catch((error) => {
   console.error(error)
+}).then(async () => {
+  await db.destroy()
+  if (db2) { await db2.destroy() }
 })

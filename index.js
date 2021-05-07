@@ -28,7 +28,6 @@ module.exports = function (PouchDB) {
   PouchDB.plugin(transform)
 
   // save originals
-  const close = PouchDB.prototype.close
   const destroy = PouchDB.prototype.destroy
   const replicate = PouchDB.replicate
 
@@ -81,9 +80,15 @@ module.exports = function (PouchDB) {
       descending: true,
       include_docs: true
     })
-    this._encrypted._decrypted_changes.on('change', ({ doc }) => {
+    this._encrypted._decrypted_changes.on('change', async ({ doc }) => {
       if (this._encrypted._destroyed) { return }
-      return this._encrypted.put(doc)
+      try {
+        await this._encrypted.put(doc)
+      } catch (error) {
+        if (error.status !== 409) {
+          throw error
+        }
+      }
     })
   }
   // destroy wrapper that destroys both the encrypted and decrypted DBs
