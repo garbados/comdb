@@ -1,6 +1,0 @@
-language: node_js
-node_js:
-- stable
-after_success:
-- npm i nyc coveralls
-- nyc npm test && nyc report --reporter=text-lcov | coveralls

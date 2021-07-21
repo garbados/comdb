@@ -1,10 +1,20 @@
 {
   "name": "comdb",
-  "version": "3.0.1-beta",
+  "version": "4.0.0-beta",
   "description": "A PouchDB plugin that transparently encrypts and decrypts its data.",
   "main": "index.js",
   "scripts": {
-    "test": "standard && mocha && npm audit",
+    "release": "npm run test && npm run build && npm run build:min",
+    "build": "browserify -s ComDB -x crypto -x buffer -o bundle.js index.js ",
+    "build:min": "uglifyjs -mc -o bundle.min.js bundle.js",
+    "test": "npm run test:lint && npm run test:node && npm run test:browser",
+    "test:lint": "standard && dependency-check --unused --no-dev .",
+    "test:node": "mocha",
+    "test:browser": "mochify test.js",
+    "cov": "npm run cov:node && npm run cov:browser && nyc report",
+    "cov:node": "nyc -s npm run test:node",
+    "cov:browser": "nyc -s --no-clean --instrument false mochify --transform [ babelify --ignore [ test ] --plugins [ babel-plugin-istanbul ] ] test.js",
+    "coveralls": "npm run cov && nyc report --reporter=text-lcov > lcov.info",
     "example": "./examples/couchdb.js"
   },
   "repository": {
@@ -24,13 +34,22 @@
   },
   "homepage": "https://github.com/garbados/comdb#readme",
   "dependencies": {
-    "lodash.isequal": "^4.5.0",
-    "pouchdb": "^7.2.2",
+    "garbados-crypt": "^1.0.2-alpha",
+    "transform-pouch": "^1.1.5",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1"
   },
   "devDependencies": {
-    "mocha": "^8.3.1",
-    "standard": "^16.0.3"
+    "babel-plugin-istanbul": "^6.0.0",
+    "babelify": "^10.0.0",
+    "browserify": "^17.0.0",
+    "dependency-check": "^4.1.0",
+    "lodash.isequal": "^4.5.0",
+    "mocha": "^9.0.2",
+    "mochify": "^8.1.0",
+    "nyc": "^15.1.0",
+    "pouchdb": "^7.2.2",
+    "standard": "^16.0.3",
+    "uglify-js": "^3.13.5"
   }
 }
