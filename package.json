@@ -1,6 +1,6 @@
 {
   "name": "comdb",
-  "version": "3.0.1-beta",
+  "version": "4.0.0-beta",
   "description": "A PouchDB plugin that transparently encrypts and decrypts its data.",
   "main": "index.js",
   "scripts": {
