@@ -2,17 +2,16 @@
 
 const Crypt = require('garbados-crypt')
 const transform = require('transform-pouch')
-const createHash = require('create-hash')
+const { hash: naclHash } = require('tweetnacl')
+const { decodeUTF8, encodeBase64 } = require('tweetnacl-util')
 
 const PASSWORD_REQUIRED = 'You must provide a password.'
 const PASSWORD_NOT_STRING = 'Password must be a string.'
 
-const HASH_ALGO = 'sha256'
-
 async function hash (payload) {
-  const hash = createHash(HASH_ALGO)
-  hash.update(payload)
-  return hash.digest('hex')
+  const bytes = decodeUTF8(payload)
+  const hashed = naclHash(bytes)
+  return encodeBase64(hashed)
 }
 
 function cbify (promise, callback) {

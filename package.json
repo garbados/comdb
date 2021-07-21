@@ -34,9 +34,10 @@
   },
   "homepage": "https://github.com/garbados/comdb#readme",
   "dependencies": {
-    "create-hash": "^1.2.0",
     "garbados-crypt": "^1.0.2-alpha",
-    "transform-pouch": "^1.1.5"
+    "transform-pouch": "^1.1.5",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
   },
   "devDependencies": {
     "babel-plugin-istanbul": "^6.0.0",
@@ -44,8 +45,8 @@
     "browserify": "^17.0.0",
     "dependency-check": "^4.1.0",
     "lodash.isequal": "^4.5.0",
-    "mocha": "^8.3.1",
-    "mochify": "^7.1.0",
+    "mocha": "^9.0.2",
+    "mochify": "^8.1.0",
     "nyc": "^15.1.0",
     "pouchdb": "^7.2.2",
     "standard": "^16.0.3",
