@@ -22,7 +22,7 @@ that maps changes to and from your database. In this example, the
 encrypted database exists on a CouchDB instance, while the decrypted
 one lives on disk.
   `)
-  db.setPassword(password, {
+  await db.setPassword(password, {
     name: [COUCH_URL, 'comdb-example'].join('/')
   })
   const { id } = await db.post({ greetings: 'hello world' })
@@ -44,8 +44,8 @@ This document lives in CouchDB such that your decrypted data never
 leaves the local machine.
   `)
   console.log(doc)
-  const { id } = JSON.parse(await db._crypt.decrypt(doc.payload))
-  return db._encrypted.get(id)
+  const { _id: id } = JSON.parse(await db._crypt.decrypt(doc.payload))
+  return db.get(id)
 }).then((doc) => {
   console.log(`
 Here is the payload from that document, decrypted:
@@ -59,7 +59,10 @@ password, it will transparently decrypt replicated documents. Now I
 will replicate our first database to our second...
   `)
   db2 = new PouchDB('.comdb-example-2')
-  db2.setPassword(password)
+  const keyDoc = await db.get('_local/comdb')
+  delete keyDoc._rev
+  await db2.put(keyDoc)
+  await db2.setPassword(password)
   await db.replicate.to(db2)
   const { rows } = await db2.allDocs({ include_docs: true, limit: 1 })
   const { doc } = rows[0]

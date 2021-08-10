@@ -17,15 +17,14 @@ PouchDB.plugin(require('comdb'))
 const password = 'extremely secure value'
 
 const db = new PouchDB(POUCH_PATH)
-db.setPassword(password)
-
-db.post({
-  _id: 'gay-agenda',
-  type: 'queerspiracy',
-  agenda: ['be gay', 'do crimes']
-}).then(() => {
+db.setPassword(password).then(async () => {
+  await db.post({
+    _id: 'gay-agenda',
+    type: 'queerspiracy',
+    agenda: ['be gay', 'do crimes']
+  })
   // now replicate to a couchdb instance
-  return db.replicate.to(`${COUCH_URL}/FALGSC`)
+  await db.replicate.to(`${COUCH_URL}/FALGSC`)
 })
 ```
 
@@ -79,7 +78,7 @@ In the above example, we replicated data from a local encrypted copy of our data
 
 ```javascript
 const db = new PouchDB(POUCH_PATH)
-db.setPassword(password, { name: COUCH_URL })
+await db.setPassword(password, { name: COUCH_URL })
 ```
 
 Now you can give your data to strangers *with confidence!*
@@ -101,7 +100,7 @@ const PouchDB = require('pouchdb')
 PouchDB.plugin(require('comdb'))
 
 const db = new PouchDB(...)
-db.setPassword(...)
+await db.setPassword(...)
 ```
 
 You can also use PouchDB and ComDB in the browser using [browserify](http://browserify.org/).
@@ -125,48 +124,29 @@ The instance methods `db.replicate.to` and `db.replicate.from` automatically use
 
 Original: [`PouchDB.replicate`](https://pouchdb.com/api.html#replication)
 
-### `db.setPassword(password, [opts])`
+### `async db.setPassword(password, [opts])`
 
 Mutates the instance with crypto tooling so that it can encrypt and decrypt documents.
 
-Returns nothing.
+```javascript
+await db.setPassword('hello world')
+// db will now maintain an encrypted copy
+```
 
 - `password`: A string used to encrypt and decrypt documents.
 - `opts.name`: A name or connection string for the encrypted database.
 - `opts.opts`: An options object passed to the encrypted database's constructor. Use this to pass any options accepted by [PouchDB's constructor](https://pouchdb.com/api.html#create_database).
 
-### `db.bulkDocs(docs, [opts], [callback])`
-
-ComDB wraps PouchDB's bulk document update method, which is used by all of PouchDB's other document creation and update methods, so that every update -- including deletions! -- is mapped to the encrypted database. ComDB also wraps the encrypted database's `bulkDocs` method in order to map its changes to the decrypted database, in order to (for example) restore data from an encrypted backup.
-
-Original: [`db.bulkDocs`](https://pouchdb.com/api.html#batch_create)
-
-### `db.encrypt(doc)`
-
-A convenience method for encrypting a document using the currently set password. Used internally to encrypt documents before saving them to the encrypted database.
-
-Returns the document as an encrypted string.
-
-- `doc`: Any object, but probably a document.
-
-### `db.decrypt(payload)`
-
-A convenience method for decrypting payloads using the currently set password. Used internally to decrypt documents before saving them to the decrypted database.
-
-Returns the document as an object.
-
-- `payload`: An encrypted string returned by `db.encrypt(doc)`.
-
-### `db.destroy([opts], callback)`
+### `async db.destroy([opts], callback)`
 
 ComDB wraps PouchDB's database destruction method so that both the encrypted and decrypted databases are destroyed. ComDB adds two options to the method:
 
 - `encrypted_only`: Destroy only the encrypted database. This is useful when a backup has become compromised and you need to burn it.
 - `unencrypted_only`: Destroy only the unencrypted database. This is useful if you are using a remote encrypted backup and want to burn the local device so you can restore from backup on a fresh one.
 
-Original: [db.destroy](https://pouchdb.com/api.html#delete_database)
+Original: [db.destroy()](https://pouchdb.com/api.html#delete_database)
 
-### `db.loadEncrypted(callback)`
+### `async db.loadEncrypted(opts = {})`
 
 Load changes from the encrypted database into the decrypted one. Useful if you are restoring from backup:
 
@@ -174,11 +154,28 @@ Load changes from the encrypted database into the decrypted one. Useful if you a
 // in-memory database is wiped on restart and so needs to be repopulated
 const db = new PouchDB('local', { adapter: 'memory' })
 // the encrypted DB lives on remote disk, so we can load docs from it
-db.setPassword(PASSWORD, { name: REMOTE_URL })
-db.loadEncrypted().then(() => {
+db.setPassword(PASSWORD, { name: REMOTE_URL }).then(async () => {
+  await db.loadEncrypted()
   // all encrypted docs have been loaded into the decrypted database
 })
 ```
+
+Accepts the same options as [PouchDB.replicate()](https://pouchdb.com/api.html#replication).
+
+### `async db.loadDecrypted(opts = {})`
+
+Load changes from the decrypted database into the encrypted one. Useful if you are instrumenting encryption onto a database that already exists.
+
+```javascript
+// db already exists, we are just adding encryption
+const db = new PouchDB('local')
+db.setPassword(PASSWORD).then(async () => {
+  await db.loadDecrypted()
+  // all decrypted docs have been loaded into the encrypted database
+})
+```
+
+Accepts the same options as [db.changes()](https://pouchdb.com/api.html#changes).
 
 ## Recipe: End-to-End Encryption
 
@@ -190,9 +187,9 @@ Consider this setup:
 // in-memory database is wiped on restart and so needs to be repopulated
 const db = new PouchDB('local', { adapter: 'memory' })
 // the encrypted copy lives on local disk, so we can load docs from it
-db.setPassword(PASSWORD)
-// repopulate database from encrypted local copy
-db.loadEncrypted().then(() => {
+db.setPassword(PASSWORD).then(async () => {
+  // repopulate database from encrypted local copy
+  await db.loadEncrypted()
   // decrypted database is up to date, app is ready to go
 })
 ```
