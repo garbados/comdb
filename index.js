@@ -4,9 +4,12 @@ const Crypt = require('garbados-crypt')
 const transform = require('transform-pouch')
 const { hash: naclHash } = require('tweetnacl')
 const { decodeUTF8, encodeBase64 } = require('tweetnacl-util')
+const { v4: uuid } = require('uuid')
+const wrappers = require('pouchdb-wrappers')
 
 const PASSWORD_REQUIRED = 'You must provide a password.'
 const PASSWORD_NOT_STRING = 'Password must be a string.'
+const LOCAL_ID = '_local/comdb'
 
 async function hash (payload) {
   const bytes = decodeUTF8(payload)
@@ -14,78 +17,24 @@ async function hash (payload) {
   return encodeBase64(hashed)
 }
 
-function cbify (promise, callback) {
-  return !callback
-    ? promise // no callback. just return the promise.
-    : promise // or, delegate to the callback on result and error
-      .then((result) => { return callback(null, result) })
-      .catch((error) => { return callback(error) })
-}
-
 module.exports = function (PouchDB) {
   // apply plugins
   PouchDB.plugin(transform)
 
-  // save originals
-  const destroy = PouchDB.prototype.destroy
-  const replicate = PouchDB.replicate
-
-  // replication wrapper; handles ComDB instances transparently
-  PouchDB.replicate = function (source, target, opts = {}, callback) {
-    if (opts.comdb !== false) {
-      if (source._encrypted) source = source._encrypted
-      if (target._encrypted) target = target._encrypted
-    }
-    const promise = replicate(source, target, opts)
-    return cbify(promise, callback)
-  }
-
-  // setup function; must call before anything works
-  PouchDB.prototype.setPassword = function (password, opts = {}) {
-    if (!password) { throw new Error(PASSWORD_REQUIRED) }
-    if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
-    this._password = password
-    this._crypt = new Crypt(password)
-    const encryptedName = opts.name || `${this.name}-encrypted`
-    const encryptedOpts = opts.opts || {}
-    this._encrypted = new PouchDB(encryptedName, encryptedOpts)
-    this._encrypted.transform({
-      // encrypt docs as they go in
-      incoming: async (doc) => {
-        // catch encrypted writes and apply them to the decrypted database
-        if (doc.isEncrypted) {
-          // first we decrypt the encrypted write
-          const json = await this._crypt.decrypt(doc.payload)
-          const decryptedDoc = JSON.parse(json)
-          // then we put it into the decrypted database
-          if (decryptedDoc._deleted) {
-            try { await this.remove(decryptedDoc) } catch { /* mimic new_edits: false */ }
-          } else {
-            await this.bulkDocs({ docs: [decryptedDoc], new_edits: false })
-          }
-          // finally we put it in the encrypted database unmolested
-          return doc
-        }
-        // encrypt the doc
-        const json = JSON.stringify(doc)
-        const payload = await this._crypt.encrypt(json)
-        // get a deterministic ID
-        const id = await hash(payload)
-        return { _id: id, payload, isEncrypted: true }
+  // apply class method wrappers
+  wrappers.install(PouchDB, {
+    replicate (orig, source, target, opts = {}) {
+      if (opts.comdb !== false) {
+        if (source._encrypted) source = source._encrypted
+        if (target._encrypted) target = target._encrypted
       }
-    })
-    this._encrypted._decrypted_changes = this.changes({
-      live: true,
-      descending: true,
-      include_docs: true
-    })
-    this._encrypted._decrypted_changes.on('change', async ({ doc }) => {
-      if (this._encrypted._destroyed) { return }
-      try { await this._encrypted.put(doc) } catch { /* mimic new_edits:true */ }
-    })
-  }
-  // destroy wrapper that destroys both the encrypted and decrypted DBs
-  PouchDB.prototype.destroy = function (opts = {}, callback) {
+      return orig(source, target, opts)
+    }
+  })
+
+  // apply instance method wrappers
+  const destroy = PouchDB.prototype.destroy
+  PouchDB.prototype.destroy = async function (opts = {}) {
     let promise
     if (!this._encrypted || opts.unencrypted_only) {
       promise = destroy.call(this, opts)
@@ -97,23 +46,101 @@ module.exports = function (PouchDB) {
         destroy.call(this, opts)
       ])
     }
-    return cbify(promise, callback)
+    return promise
+  }
+
+  // setup function; must call before anything works
+  PouchDB.prototype.setPassword = async function (password, opts = {}) {
+    if (!password) { throw new Error(PASSWORD_REQUIRED) }
+    if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
+    this._password = password
+    const trySetup = async () => {
+      // try saving credentials to a local doc
+      try {
+        // first we try to get saved creds from the local doc
+        const { exportString } = await this.get(LOCAL_ID)
+        this._crypt = await Crypt.import(password, exportString)
+      } catch (err) {
+        // istanbul ignore else
+        if (err.status === 404) {
+          // but if the doc doesn't exist, we do first-time setup
+          this._crypt = new Crypt(password)
+          const exportString = await this._crypt.export()
+          try {
+            await this.put({ _id: LOCAL_ID, exportString })
+          } catch (err2) {
+            // istanbul ignore else
+            if (err2.status === 409) {
+              // if the doc was created while we were setting up,
+              // try setting up again to retrieve the saved credentials.
+              await trySetup()
+            } else {
+              throw err2
+            }
+          }
+        } else {
+          throw err
+        }
+      }
+    }
+    await trySetup()
+    const encryptedName = opts.name || `${this.name}-encrypted`
+    const encryptedOpts = opts.opts || {}
+    this._encrypted = new PouchDB(encryptedName, encryptedOpts)
+    this._encrypted.transform({
+      // encrypt docs as they go in
+      incoming: async (doc) => {
+        if (doc.isEncrypted) {
+          // feed already-encrypted docs back to the decrypted db
+          const decrypted = await this._crypt.decrypt(doc.payload)
+          await this.bulkDocs([doc])
+          return doc
+        } else {
+          // encrypt the doc
+          const json = JSON.stringify(doc)
+          const payload = await this._crypt.encrypt(json)
+          // get a deterministic ID
+          const id = await hash(payload)
+          const encrypted = { _id: id, payload, isEncrypted: true }
+          // maybe feed back to decrypted db
+          if (doc._rev && doc._deleted) {
+            await this.bulkDocs([encrypted])
+          }
+          return encrypted
+        }
+      }
+    })
+    this.transform({
+      incoming: async (doc) => {
+        if (doc.isEncrypted) {
+          // decrypt encrypted payloads being fed back from the encrypted db
+          const json = await this._crypt.decrypt(doc.payload)
+          return JSON.parse(json)
+        } else {
+          if (!doc._id) doc._id = uuid()
+          await this._encrypted.bulkDocs([doc])
+          return doc
+        }
+      }
+    })
   }
 
   // load from encrypted db, to catch up to offline writes
-  PouchDB.prototype.loadEncrypted = async function (callback) {
+  PouchDB.prototype.loadEncrypted = async function () {
     const changes = this._encrypted.changes({ include_docs: true })
     const promises = []
-    changes.on('change', async ({ doc: { payload } }) => {
-      const json = await this._crypt.decrypt(payload)
-      const doc = JSON.parse(json)
-      const promise = this.bulkDocs({ docs: [doc], new_edits: false })
-      promises.push(promise)
+    changes.on('change', ({ doc: { payload } }) => {
+      const doSave = async () => {
+        const json = await this._crypt.decrypt(payload)
+        const doc = JSON.parse(json)
+        await this.bulkDocs([doc], { new_edits: false })
+      }
+      promises.push(doSave())
     })
     await new Promise((resolve, reject) => {
       changes.on('complete', resolve)
       changes.on('error', reject)
     })
-    return cbify(Promise.all(promises), callback)
+    return Promise.all(promises)
   }
 }
