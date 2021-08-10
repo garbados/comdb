@@ -5,7 +5,6 @@ const transform = require('transform-pouch')
 const { hash: naclHash } = require('tweetnacl')
 const { decodeUTF8, encodeBase64 } = require('tweetnacl-util')
 const { v4: uuid } = require('uuid')
-const wrappers = require('pouchdb-wrappers')
 
 const PASSWORD_REQUIRED = 'You must provide a password.'
 const PASSWORD_NOT_STRING = 'Password must be a string.'
@@ -22,29 +21,33 @@ module.exports = function (PouchDB) {
   PouchDB.plugin(transform)
 
   // apply class method wrappers
-  wrappers.install(PouchDB, {
-    replicate (orig, source, target, opts = {}) {
-      if (opts.comdb !== false) {
-        if (source._encrypted) source = source._encrypted
-        if (target._encrypted) target = target._encrypted
-      }
-      return orig(source, target, opts)
+  const replicate = PouchDB.replicate
+  PouchDB.replicate = function (source, target, opts = {}) {
+    if (opts.comdb !== false) {
+      if (source._encrypted) source = source._encrypted
+      if (target._encrypted) target = target._encrypted
     }
-  })
+    return replicate(source, target, opts)
+  }
 
   // apply instance method wrappers
   const destroy = PouchDB.prototype.destroy
   PouchDB.prototype.destroy = async function (opts = {}) {
     let promise
     if (!this._encrypted || opts.unencrypted_only) {
-      promise = destroy.call(this, opts)
+      // istanbul ignore else
+      if (!this._destroyed)
+        promise = destroy.call(this, opts)
     } else if (opts.encrypted_only) {
-      promise = destroy.call(this._encrypted, opts)
+      // istanbul ignore else
+      if (!this._encrypted._destroyed)
+        promise = destroy.call(this._encrypted, opts)
     } else {
-      promise = Promise.all([
-        destroy.call(this._encrypted, opts),
-        destroy.call(this, opts)
-      ])
+      const promises = []
+      if (!this._destroyed)
+        promises.push(destroy.call(this, opts))
+      if (!this._encrypted._destroyed)
+        promises.push(destroy.call(this._encrypted, opts))
     }
     return promise
   }
@@ -92,7 +95,6 @@ module.exports = function (PouchDB) {
       incoming: async (doc) => {
         if (doc.isEncrypted) {
           // feed already-encrypted docs back to the decrypted db
-          const decrypted = await this._crypt.decrypt(doc.payload)
           await this.bulkDocs([doc])
           return doc
         } else {
@@ -100,7 +102,7 @@ module.exports = function (PouchDB) {
           const json = JSON.stringify(doc)
           const payload = await this._crypt.encrypt(json)
           // get a deterministic ID
-          const id = await hash(payload)
+          const id = await hash(json)
           const encrypted = { _id: id, payload, isEncrypted: true }
           // maybe feed back to decrypted db
           if (doc._rev && doc._deleted) {

@@ -1,4 +1,4 @@
-/* global describe, it, before, after */
+/* global describe, it, beforeEach, afterEach */
 'use strict'
 
 const isEqual = require('lodash.isequal')
@@ -6,6 +6,7 @@ const assert = require('assert')
 const PouchDB = require('pouchdb')
 const ComDB = require('.')
 const Crypt = require('garbados-crypt')
+PouchDB.plugin(ComDB)
 
 const {
   COUCH_URL,
@@ -13,8 +14,7 @@ const {
 } = process.env
 
 describe('ComDB', function () {
-  before(async function () {
-    PouchDB.plugin(ComDB)
+  beforeEach(async function () {
     this.password = 'hello-world'
     this.name = '.comdb-test'
     this.db = new PouchDB(this.name)
@@ -23,7 +23,7 @@ describe('ComDB', function () {
     })
   })
 
-  after(function () {
+  afterEach(function () {
     return this.db.destroy()
   })
 
@@ -125,7 +125,19 @@ describe('ComDB', function () {
       await this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
       let result = await this.dbs.encrypted.allDocs()
       assert.equal(result.rows.length, 0)
-      const blah = await this.dbs.decrypted.loadDecrypted()
+      await this.dbs.decrypted.loadDecrypted()
+      result = await this.dbs.encrypted.allDocs()
+      assert.equal(result.rows.length, 1)
+    })
+
+    it('should process decrypted writes repeatedly', async function () {
+      await this.dbs.decrypted.post({ hello: 'world' })
+      await this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
+      let result = await this.dbs.encrypted.allDocs()
+      assert.equal(result.rows.length, 0)
+      await this.dbs.decrypted.loadDecrypted()
+      await this.dbs.decrypted.loadDecrypted()
+      await this.dbs.decrypted.loadDecrypted()
       result = await this.dbs.encrypted.allDocs()
       assert.equal(result.rows.length, 1)
     })
@@ -142,16 +154,16 @@ describe('ComDB', function () {
   })
 
   describe('destroy', function () {
-    before(async function () {
+    beforeEach(async function () {
       this.db_destroyable_1 = new PouchDB('test-destroy-1')
       this.db_destroyable_2 = new PouchDB('test-destroy-2')
       await this.db_destroyable_1.setPassword('goodpassword')
       await this.db_destroyable_2.setPassword('goodpassword')
     })
 
-    after(async function () {
-      await this.db_destroyable_1._encrypted.destroy()
-      await this.db_destroyable_2.destroy({ unencrypted_only: true })
+    afterEach(async function () {
+      await this.db_destroyable_1.destroy()
+      await this.db_destroyable_2.destroy()
     })
 
     it('should optionally not destroy the encrypted copy', async function () {
@@ -168,7 +180,7 @@ describe('ComDB', function () {
   })
 
   describe('replication', function () {
-    before(async function () {
+    beforeEach(async function () {
       this.name2 = [this.name, '2'].join('-')
       this.db2 = new PouchDB(this.name2)
       const keyDoc = await this.db.get('_local/comdb')
@@ -178,7 +190,7 @@ describe('ComDB', function () {
       return this.db.post({ hello: 'sol' })
     })
 
-    after(function () {
+    afterEach(function () {
       return this.db2.destroy()
     })
 

@@ -60,7 +60,7 @@ will replicate our first database to our second...
   `)
   db2 = new PouchDB('.comdb-example-2')
   const keyDoc = await db.get('_local/comdb')
-  delete(keyDoc._rev)
+  delete keyDoc._rev
   await db2.put(keyDoc)
   await db2.setPassword(password)
   await db.replicate.to(db2)

@@ -35,7 +35,6 @@
   "homepage": "https://github.com/garbados/comdb#readme",
   "dependencies": {
     "garbados-crypt": "^3.0.0-alpha",
-    "pouchdb-wrappers": "^5.0.0",
     "transform-pouch": "^2.0.0",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
