@@ -150,6 +150,7 @@ describe('ComDB', function () {
       await this.dbs.decrypted.post({ hello: 'world' })
       await new Promise((resolve) => setTimeout(resolve, 20))
       assert(ok)
+      changes.cancel()
     })
   })
 
@@ -181,17 +182,17 @@ describe('ComDB', function () {
 
   describe('replication', function () {
     beforeEach(async function () {
-      this.name2 = [this.name, '2'].join('-')
+      this.name2 = [this.name, 'replication', '2'].join('-')
       this.db2 = new PouchDB(this.name2)
       const keyDoc = await this.db.get('_local/comdb')
       delete keyDoc._rev
       await this.db2.put(keyDoc) // share keys
       await this.db2.setPassword(this.password)
-      return this.db.post({ hello: 'sol' })
+      await this.db.post({ hello: 'sol' })
     })
 
-    afterEach(function () {
-      return this.db2.destroy()
+    afterEach(async function () {
+      await this.db2.destroy()
     })
 
     it('should restore data from an encrypted backup', async function () {

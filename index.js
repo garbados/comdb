@@ -36,18 +36,15 @@ module.exports = function (PouchDB) {
     let promise
     if (!this._encrypted || opts.unencrypted_only) {
       // istanbul ignore else
-      if (!this._destroyed)
-        promise = destroy.call(this, opts)
+      if (!this._destroyed) { promise = destroy.call(this, opts) }
     } else if (opts.encrypted_only) {
       // istanbul ignore else
-      if (!this._encrypted._destroyed)
-        promise = destroy.call(this._encrypted, opts)
+      if (!this._encrypted._destroyed) { promise = destroy.call(this._encrypted, opts) }
     } else {
       const promises = []
-      if (!this._destroyed)
-        promises.push(destroy.call(this, opts))
-      if (!this._encrypted._destroyed)
-        promises.push(destroy.call(this._encrypted, opts))
+      if (!this._destroyed) { promises.push(destroy.call(this, opts)) }
+      if (!this._encrypted._destroyed) { promises.push(destroy.call(this._encrypted, opts)) }
+      promise = Promise.all(promises)
     }
     return promise
   }
