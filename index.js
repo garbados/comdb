@@ -126,21 +126,26 @@ module.exports = function (PouchDB) {
   }
 
   // load from encrypted db, to catch up to offline writes
-  PouchDB.prototype.loadEncrypted = async function () {
-    const changes = this._encrypted.changes({ include_docs: true })
+  PouchDB.prototype.loadEncrypted = async function (opts = {}) {
+    return this._encrypted.replicate.to(this, { ...opts, comdb: false })
+  }
+
+  PouchDB.prototype.loadDecrypted = function (opts = {}) {
+    const changes = this.changes({ ...opts, include_docs: true })
     const promises = []
-    changes.on('change', ({ doc: { payload } }) => {
-      const doSave = async () => {
-        const json = await this._crypt.decrypt(payload)
-        const doc = JSON.parse(json)
-        await this.bulkDocs([doc], { new_edits: false })
-      }
-      promises.push(doSave())
+    changes.on('change', ({ doc }) => {
+      promises.push(this._encrypted.bulkDocs([doc]))
     })
-    await new Promise((resolve, reject) => {
-      changes.on('complete', resolve)
-      changes.on('error', reject)
-    })
-    return Promise.all(promises)
+    if (opts.live) {
+      return changes
+    } else {
+      const closed = new Promise((resolve, reject) => {
+        changes.on('complete', resolve)
+        changes.on('error', reject)
+      })
+      return closed.then(() => {
+        return Promise.all(promises)
+      })
+    }
   }
 }

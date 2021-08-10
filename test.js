@@ -87,7 +87,7 @@ describe('ComDB', function () {
   })
 
   describe('offline recovery', function () {
-    before(function () {
+    beforeEach(function () {
       this.offline = {
         decrypted: 'offline-decrypted',
         encrypted: 'offline-encrypted'
@@ -99,19 +99,14 @@ describe('ComDB', function () {
       }
     })
 
-    after(async function () {
+    afterEach(async function () {
       await this.dbs.decrypted.destroy({ unencrypted_only: true })
       await this.dbs.encrypted.destroy()
     })
 
     it('should process encrypted writes that happened offline', async function () {
       // 1. write to encrypted db
-      const payload = await this.crypt.encrypt(JSON.stringify({
-        _id: 'hello',
-        _rev: '1-15f65339921e497348be384867bb940f',
-        hello: 'world'
-      }))
-      await this.dbs.encrypted.post({ payload })
+      await this.dbs.encrypted.post({ _id: 'hello', hello: 'world' })
       // 2. hook up decrypted db to encrypted
       await this.dbs.decrypted.put({
         _id: '_local/comdb',
@@ -123,6 +118,26 @@ describe('ComDB', function () {
       // check for doc in db
       const doc = await this.dbs.decrypted.get('hello')
       assert.equal(doc.hello, 'world')
+    })
+
+    it('should process decrypted writes that happened offline', async function () {
+      await this.dbs.decrypted.post({ hello: 'world' })
+      await this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
+      let result = await this.dbs.encrypted.allDocs()
+      assert.equal(result.rows.length, 0)
+      const blah = await this.dbs.decrypted.loadDecrypted()
+      result = await this.dbs.encrypted.allDocs()
+      assert.equal(result.rows.length, 1)
+    })
+
+    it('should allow persistent loading of decrypted writes', async function () {
+      await this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
+      const changes = this.dbs.decrypted.loadDecrypted({ live: true })
+      let ok = false
+      changes.on('change', () => { ok = true })
+      await this.dbs.decrypted.post({ hello: 'world' })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      assert(ok)
     })
   })
 
