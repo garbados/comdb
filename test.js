@@ -14,7 +14,7 @@ const {
 } = process.env
 
 describe('ComDB', function () {
-  this.timeout(5 * 1000)
+  this.timeout(10 * 1000)
 
   beforeEach(async function () {
     this.password = 'hello-world'
