@@ -114,7 +114,28 @@ module.exports = function (PouchDB) {
         if (doc.isEncrypted) {
           // decrypt encrypted payloads being fed back from the encrypted db
           const json = await this._crypt.decrypt(doc.payload)
-          return JSON.parse(json)
+          const decrypted = JSON.parse(json)
+          if ('_rev' in decrypted) {
+            return decrypted
+          } else {
+            // decrypted doc has no rev. there might already be one in the db
+            // so we have to check for it.
+            try {
+              const { _revisions: { ids } } = await this.get(decrypted._id, { revs: true })
+              decrypted._rev = `1-${ids[ids.length - 1]}`
+            } catch (err) {
+              if (err.name === 'not_found') {
+                // return the rev-less doc if no rev exists for it
+                return decrypted
+              } else {
+                throw err
+              }
+            }
+            // original doc lacks _rev, so apply it back now that we know it
+            doc.payload = await this._crypt.encrypt(JSON.stringify(decrypted))
+            await this._encrypted.put(doc)
+            return decrypted
+          }
         } else {
           if (!doc._id) doc._id = uuid()
           await this._encrypted.bulkDocs([doc])
