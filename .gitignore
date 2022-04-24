@@ -4,3 +4,4 @@ node_modules/
 .comdb-example/
 bundle.js
 bundle.min.js
+scratch*
