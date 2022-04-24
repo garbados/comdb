@@ -1,6 +1,6 @@
 {
   "name": "comdb",
-  "version": "5.0.2-beta",
+  "version": "5.0.3-beta",
   "description": "A PouchDB plugin that transparently encrypts and decrypts its data.",
   "main": "index.js",
   "files": [],
@@ -47,7 +47,7 @@
     "browserify": "^17.0.0",
     "dependency-check": "^4.1.0",
     "lodash.isequal": "^4.5.0",
-    "mocha": "^9.0.2",
+    "mocha": "^9.2.2",
     "mochify": "^9.2.0",
     "nyc": "^15.1.0",
     "pouchdb": "^7.3.0",
