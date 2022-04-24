@@ -14,7 +14,7 @@ const {
 } = process.env
 
 describe('ComDB', function () {
-  this.timeout(5 * 1000)
+  this.timeout(10 * 1000)
 
   beforeEach(async function () {
     this.password = 'hello-world'
@@ -119,6 +119,26 @@ describe('ComDB', function () {
       await this.dbs.decrypted.loadEncrypted()
       // check for doc in db
       const doc = await this.dbs.decrypted.get('hello')
+      assert.equal(doc.hello, 'world')
+    })
+
+    it('should process encrypted writes w/o revs', async function () {
+      // 1. write to decrypted db
+      const { id } = await this.dbs.decrypted.post({ hello: 'world' })
+      const { _rev: rev, ...postDoc } = await this.dbs.decrypted.get(id)
+      // 2. write encrypted doc to de
+      const payload = await this.crypt.encrypt(JSON.stringify(postDoc))
+      await this.dbs.encrypted.post({ payload, isEncrypted: true })
+      // 3. hook up decrypted db to encrypted
+      await this.dbs.decrypted.put({
+        _id: '_local/comdb',
+        exportString: await this.crypt.export()
+      })
+      await this.dbs.decrypted.setPassword(this.password, { name: this.offline.encrypted })
+      // 4. load docs from encrypted db
+      await this.dbs.decrypted.loadEncrypted()
+      // check for doc in db
+      const doc = await this.dbs.decrypted.get(id)
       assert.equal(doc.hello, 'world')
     })
 
