@@ -5,6 +5,7 @@ const transform = require('transform-pouch')
 const { hash: naclHash } = require('tweetnacl')
 const { decodeUTF8, encodeBase64 } = require('tweetnacl-util')
 const { v4: uuid } = require('uuid')
+const { stringMd5 } = require('pouchdb-md5')
 
 const PASSWORD_REQUIRED = 'You must provide a password.'
 const PASSWORD_NOT_STRING = 'Password must be a string.'
@@ -49,50 +50,15 @@ module.exports = function (PouchDB) {
     return promise
   }
 
-  // setup function; must call before anything works
-  PouchDB.prototype.setPassword = async function (password, opts = {}) {
-    if (!password) { throw new Error(PASSWORD_REQUIRED) }
-    if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
-    this._password = password
-    const trySetup = async () => {
-      // try saving credentials to a local doc
-      try {
-        // first we try to get saved creds from the local doc
-        const { exportString } = await this.get(LOCAL_ID)
-        this._crypt = await Crypt.import(password, exportString)
-      } catch (err) {
-        // istanbul ignore else
-        if (err.status === 404) {
-          // but if the doc doesn't exist, we do first-time setup
-          this._crypt = new Crypt(password)
-          const exportString = await this._crypt.export()
-          try {
-            await this.put({ _id: LOCAL_ID, exportString })
-          } catch (err2) {
-            // istanbul ignore else
-            if (err2.status === 409) {
-              // if the doc was created while we were setting up,
-              // try setting up again to retrieve the saved credentials.
-              await trySetup()
-            } else {
-              throw err2
-            }
-          }
-        } else {
-          throw err
-        }
-      }
-    }
-    await trySetup()
-    const encryptedName = opts.name || `${this.name}-encrypted`
-    const encryptedOpts = opts.opts || {}
-    this._encrypted = new PouchDB(encryptedName, encryptedOpts)
-    this._encrypted.transform({
+  function setupEncrypted (name, opts = {}) {
+    const db = new PouchDB(name, opts)
+
+    db.transform({
       // encrypt docs as they go in
       incoming: async (doc) => {
         if (doc.isEncrypted) {
           // feed already-encrypted docs back to the decrypted db
-          await this.bulkDocs([doc])
+          await this.bulkDocs([doc], { new_edits: false })
           return doc
         } else {
           // encrypt the doc
@@ -109,33 +75,22 @@ module.exports = function (PouchDB) {
         }
       }
     })
+
+    return db
+  }
+
+  function setupDecrypted () {
     this.transform({
       incoming: async (doc) => {
         if (doc.isEncrypted) {
           // decrypt encrypted payloads being fed back from the encrypted db
           const json = await this._crypt.decrypt(doc.payload)
           const decrypted = JSON.parse(json)
-          if ('_rev' in decrypted) {
-            return decrypted
-          } else {
-            // decrypted doc has no rev. there might already be one in the db
-            // so we have to check for it.
-            try {
-              const { _revisions: { ids } } = await this.get(decrypted._id, { revs: true })
-              decrypted._rev = `1-${ids[ids.length - 1]}`
-            } catch (err) {
-              if (err.name === 'not_found') {
-                // return the rev-less doc if no rev exists for it
-                return decrypted
-              } else {
-                throw err
-              }
-            }
-            // original doc lacks _rev, so apply it back now that we know it
-            doc.payload = await this._crypt.encrypt(JSON.stringify(decrypted))
-            await this._encrypted.put(doc)
-            return decrypted
+          if (!('_rev' in decrypted)) {
+            // construct an artificial rev, predicting what it will be
+            decrypted._rev = `1-${stringMd5(JSON.stringify(decrypted))}`
           }
+          return decrypted
         } else {
           if (!doc._id) doc._id = uuid()
           await this._encrypted.bulkDocs([doc])
@@ -143,6 +98,88 @@ module.exports = function (PouchDB) {
         }
       }
     })
+  }
+
+  async function setupComDB (password) {
+    // try saving credentials to a local doc
+    try {
+      // first we try to get saved creds from the local doc
+      const { exportString } = await this._encrypted.get(LOCAL_ID)
+      this._crypt = await Crypt.import(password, exportString)
+    } catch (err) {
+      // istanbul ignore else
+      if (err.status === 404) {
+        // but if the doc doesn't exist, we do first-time setup
+        this._crypt = new Crypt(password)
+        const exportString = await this._crypt.export()
+        try {
+          await this._encrypted.put({ _id: LOCAL_ID, exportString })
+        } catch (err2) {
+          // istanbul ignore else
+          if (err2.status === 409) {
+            // if the doc was created while we were setting up,
+            // try setting up again to retrieve the saved credentials.
+            await setupComDB.call(this, password)
+          } else {
+            throw err2
+          }
+        }
+      } else {
+        throw err
+      }
+    }
+  }
+
+  async function importComDB (password, exportString) {
+    this._crypt = await Crypt.import(password, exportString)
+    try {
+      await this._encrypted.put({ _id: LOCAL_ID, exportString })
+    } catch (err) {
+      // istanbul ignore if
+      if (err.status !== 409) {
+        throw err
+      }
+    }
+  }
+
+  function parseEncryptedOpts (opts = {}) {
+    return [
+      opts.name || `${this.name}-encrypted`,
+      opts.opts || {}
+    ]
+  }
+
+  // setup function; must call before anything works
+  PouchDB.prototype.setPassword = async function (password, opts = {}) {
+    if (!password) { throw new Error(PASSWORD_REQUIRED) }
+    if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
+    this._password = password
+    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
+    this._encrypted = setupEncrypted.call(this, encryptedName, encryptedOpts)
+    setupDecrypted.call(this)
+    await setupComDB.call(this, password)
+  }
+
+  PouchDB.prototype.importComDB = async function (password, exportString, opts = {}) {
+    if (!password) { throw new Error(PASSWORD_REQUIRED) }
+    if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
+    if (!exportString) { throw new Error('TODO') }
+    if (typeof exportString !== 'string') { throw new Error('TODO') }
+    this._password = password
+    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
+    this._encrypted = setupEncrypted.call(this, encryptedName, encryptedOpts)
+    setupDecrypted.call(this)
+    await importComDB.call(this, password, exportString)
+  }
+
+  PouchDB.prototype.exportComDB = async function () {
+    const { exportString } = await this._encrypted.get(LOCAL_ID)
+    return exportString
+  }
+
+  PouchDB.prototype.getComDB = function (opts = {}) {
+    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
+    return new PouchDB(encryptedName, encryptedOpts)
   }
 
   // load from encrypted db, to catch up to offline writes

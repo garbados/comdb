@@ -4,9 +4,10 @@
 const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const PouchDB = require('pouchdb')
-const ComDB = require('.')
 const Crypt = require('garbados-crypt')
-PouchDB.plugin(ComDB)
+
+PouchDB.plugin(require('pouchdb-adapter-memory'))
+PouchDB.plugin(require('.'))
 
 const {
   COUCH_URL,
@@ -109,8 +110,8 @@ describe('ComDB', function () {
     it('should process encrypted writes that happened offline', async function () {
       // 1. write to encrypted db
       await this.dbs.encrypted.post({ _id: 'hello', hello: 'world' })
-      // 2. hook up decrypted db to encrypted
-      await this.dbs.decrypted.put({
+      // 2. provide encrypted db with necessary auth
+      await this.dbs.encrypted.put({
         _id: '_local/comdb',
         exportString: await this.crypt.export()
       })
@@ -129,8 +130,8 @@ describe('ComDB', function () {
       // 2. write encrypted doc to de
       const payload = await this.crypt.encrypt(JSON.stringify(postDoc))
       await this.dbs.encrypted.post({ payload, isEncrypted: true })
-      // 3. hook up decrypted db to encrypted
-      await this.dbs.decrypted.put({
+      // 3. provide encrypted db with necessary auth
+      await this.dbs.encrypted.put({
         _id: '_local/comdb',
         exportString: await this.crypt.export()
       })
@@ -206,10 +207,8 @@ describe('ComDB', function () {
     beforeEach(async function () {
       this.name2 = [this.name, 'replication', '2'].join('-')
       this.db2 = new PouchDB(this.name2)
-      const keyDoc = await this.db.get('_local/comdb')
-      delete keyDoc._rev
-      await this.db2.put(keyDoc) // share keys
-      await this.db2.setPassword(this.password)
+      const exportString = await this.db.exportComDB()
+      await this.db2.importComDB(this.password, exportString)
       await this.db.post({ hello: 'sol' })
     })
 
@@ -278,6 +277,30 @@ describe('ComDB', function () {
       await this.db1.put(doc1)
       const doc2 = await this.db2.get(doc1._id)
       assert.equal(doc1.hello, doc2.hello)
+    })
+  })
+
+  describe('in memory', function () {
+    beforeEach(async function () {
+      this.tempDb = new PouchDB('in-memory-test', { adapter: 'memory' })
+      this.tempEncryptedDbName = 'in-memory-test-backup'
+      await this.tempDb.setPassword(this.password, { name: this.tempEncryptedDbName })
+    })
+
+    afterEach(async function () {
+      try {
+        await this.tempDb.destroy()
+      } catch (err) {} // FIXME catch? maybe?
+    })
+
+    it('can create and recover', async function () {
+      const { id } = await this.tempDb.post({ hello: 'world' })
+      await this.tempDb.destroy({ unencrypted_only: true })
+      const otherDb = new PouchDB('in-memory-test-2', { adapter: 'memory' })
+      await otherDb.setPassword(this.password, { name: this.tempEncryptedDbName })
+      await otherDb.loadEncrypted()
+      const doc = await otherDb.get(id)
+      assert.equal(doc.hello, 'world')
     })
   })
 
