@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict'
 
+console.log('# Achieving E2E encryption with ComDB')
+
 const assert = require('assert')
 const PouchDB = require('pouchdb')
 PouchDB.plugin(require('pouchdb-adapter-memory'))
@@ -29,7 +31,7 @@ enables the 'memory' adapter.
 When you write and read documents, you will be interacting with the decrypted
 database, and thus these operations will be relatively fast.
 
-Let's write a document to our in-memory database.
+Let's write some documents to our in-memory database.
     `)
   // write a lot of docs
   const startTime = Date.now()

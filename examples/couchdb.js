@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict'
 
+console.log('# Using ComDB with CouchDB')
+
 const isEqual = require('lodash.isequal')
 const assert = require('assert')
 const PouchDB = require('pouchdb')
