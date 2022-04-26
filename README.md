@@ -51,15 +51,16 @@ $ curl "$COUCH_URL/FALGSC/_all_docs?include_docs=true" | jq .
 }
 ```
 
-ComDB can also restore encrypted data that it doesn't already have using your password:
+ComDB can also restore encrypted data that it doesn't already have
+using your password.
 
 ```javascript
 // using a different and empty database
 const db = new PouchDB(`${POUCH_PATH}-2`)
-// but using the same password
-db.setPassword(password)
+// but using the same password and encrypted copy
+db.setPassword(password, { name: `${COUCH_URL}/FALGSC` })
 // you can restore data from a remote source
-return db.replicate.from(COUCH_URL).then(() => {
+return db.loadEncrypted().then(async () => {
   return db.allDocs({ include_docs: true })
 }).then(({ rows }) => {
   const { doc } = rows[0].doc
@@ -79,6 +80,21 @@ In the above example, we replicated data from a local encrypted copy of our data
 ```javascript
 const db = new PouchDB(POUCH_PATH)
 await db.setPassword(password, { name: COUCH_URL })
+```
+
+You can also set up encryption on another device by using `db.exportComDB()` and `db.importComDB()`.
+This is useful when you want to maintain a separate encrypted copy of your data, for example
+because you want that separate copy to live on another device, while retaining the ability to
+replicate with the original encrypted copy.
+
+```javascript
+// on one machine, get the encryption key. it'll be a long string.
+const key = await db.exportComDB()
+// then on another machine, use the key with your password to set up encryption
+const db = new PouchDB(POUCH_PATH)
+await db.importComDB(password, key)
+// now you can replicate over from the original encrypted backup
+await db.replicate.from(COUCH_URL)
 ```
 
 Now you can give your data to strangers *with confidence!*

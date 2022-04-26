@@ -87,6 +87,40 @@ describe('ComDB', function () {
         assert.equal(err.message, 'Password must be a string.')
       }
     })
+
+    it('should initialize with an imported key', async function () {
+      await this.db.post({ hello: 'world' })
+      const key = await this.db.exportComDB()
+      await this.db2.importComDB(this.password, key)
+      await this.db2.importComDB(this.password, key) // can do repeatedly, ok
+      await this.db2.replicate.from(this.db)
+      const { rows: [{ doc }] } = await this.db2.allDocs({ include_docs: true, limit: 1 })
+      assert.equal(doc.hello, 'world')
+    })
+
+    it('should fail to import without required params', async function () {
+      const key = await this.db.exportComDB()
+      try {
+        await this.db2.importComDB()
+      } catch (err) {
+        assert.equal(err.message, 'You must provide a password.')
+      }
+      try {
+        await this.db2.importComDB({ password: this.password })
+      } catch (err) {
+        assert.equal(err.message, 'Password must be a string.')
+      }
+      try {
+        await this.db2.importComDB(this.password)
+      } catch (err) {
+        assert.equal(err.message, 'You must provide an export string.')
+      }
+      try {
+        await this.db2.importComDB(this.password, { key })
+      } catch (err) {
+        assert.equal(err.message, 'Your export string must be a string.')
+      }
+    })
   })
 
   describe('offline recovery', function () {

@@ -30,7 +30,7 @@ module.exports = function (PouchDB) {
       if (source._encrypted) source = source._encrypted
       if (target._encrypted) target = target._encrypted
     }
-    return replicate(source, target, opts)
+    return replicate.call(this, source, target, opts)
   }
 
   // apply instance method wrappers
@@ -52,7 +52,7 @@ module.exports = function (PouchDB) {
     return promise
   }
 
-  function setupEncrypted (name, opts = {}) {
+  function setupEncrypted (name, opts) {
     const db = new PouchDB(name, opts)
 
     db.transform({
@@ -137,21 +137,21 @@ module.exports = function (PouchDB) {
     try {
       await this._encrypted.put({ _id: LOCAL_ID, exportString })
     } catch (err) {
-      // istanbul ignore if
+      // istanbul ignore next
       if (err.status !== 409) {
         throw err
       }
     }
   }
 
-  function parseEncryptedOpts (opts = {}) {
+  function parseEncryptedOpts (opts) {
     return [
       opts.name || `${this.name}-encrypted`,
       opts.opts || {}
     ]
   }
 
-  function setupComDB (opts = {}) {
+  function setupComDB (opts) {
     const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
     this._encrypted = setupEncrypted.call(this, encryptedName, encryptedOpts)
     setupDecrypted.call(this)
@@ -177,11 +177,6 @@ module.exports = function (PouchDB) {
   PouchDB.prototype.exportComDB = async function () {
     const { exportString } = await this._encrypted.get(LOCAL_ID)
     return exportString
-  }
-
-  PouchDB.prototype.getComDB = function (opts = {}) {
-    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
-    return new PouchDB(encryptedName, encryptedOpts)
   }
 
   // load from encrypted db, to catch up to offline writes
