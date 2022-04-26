@@ -162,6 +162,38 @@ ComDB wraps PouchDB's database destruction method so that both the encrypted and
 
 Original: [db.destroy()](https://pouchdb.com/api.html#delete_database)
 
+### `async db.exportComDB()`
+
+Export the encryption key specific to your database's encrypted copy. This is necessary to creating new encrypted copies that can still replicate with the original, for example if you're creating an encrypted copy on a phone by replicating down from a server.
+
+```javascript
+// on one machine
+const db1 = new PouchDB('device-1')
+await db1.setPassword(password)
+const key = await db1.exportComDB()
+// then, on another
+const db2 = new PouchDB('device-2')
+await db2.importComDB(password, key)
+// now db2 can replicate with db1
+await PouchDB.sync(db1, db2)
+```
+
+### `async db.importComDB(password, encryptionKey)`
+
+Set up ComDB, like `db.setPassword()`, but rather than generating a new encryption key for your encrypted copy, ComDB will use the given one. This allows you to replicate with other encrypted databases using the same password and encryption key.
+
+```javascript
+// on one machine
+const db1 = new PouchDB('device-1')
+await db1.setPassword(password)
+const key = await db1.exportComDB()
+// then, on another
+const db2 = new PouchDB('device-2')
+await db2.importComDB(password, key)
+// now db2 can replicate with db1
+await PouchDB.sync(db1, db2)
+```
+
 ### `async db.loadEncrypted(opts = {})`
 
 Load changes from the encrypted database into the decrypted one. Useful if you are restoring from backup:
@@ -213,9 +245,8 @@ db.setPassword(PASSWORD).then(async () => {
 You can then replicate your encrypted database with a remote CouchDB installation to ensure you can restore your data even if your device is compromised:
 
 ```javascript
-// create remote db connection
-const remoteDb = new PouchDB('http://...') // CouchDB connection string
 // sync local encrypted with remote
+const remoteDb = 'https://...' // CouchDB url
 const sync = PouchDB.sync(db, remoteDb, { live: true, retry: true })
 ```
 
