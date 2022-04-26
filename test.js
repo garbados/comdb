@@ -205,8 +205,7 @@ describe('ComDB', function () {
 
   describe('replication', function () {
     beforeEach(async function () {
-      this.name2 = [this.name, 'replication', '2'].join('-')
-      this.db2 = new PouchDB(this.name2)
+      this.db2 = new PouchDB(`${this.name}-replication`)
       const exportString = await this.db.exportComDB()
       await this.db2.importComDB(this.password, exportString)
       await this.db.post({ hello: 'sol' })

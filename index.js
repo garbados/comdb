@@ -9,6 +9,8 @@ const { stringMd5 } = require('pouchdb-md5')
 
 const PASSWORD_REQUIRED = 'You must provide a password.'
 const PASSWORD_NOT_STRING = 'Password must be a string.'
+const EXPORT_STRING_REQUIRED = 'You must provide an export string.'
+const EXPORT_STRING_NOT_STRING = 'Your export string must be a string.'
 const LOCAL_ID = '_local/comdb'
 
 async function hash (payload) {
@@ -100,7 +102,7 @@ module.exports = function (PouchDB) {
     })
   }
 
-  async function setupComDB (password) {
+  async function setupCrypt (password) {
     // try saving credentials to a local doc
     try {
       // first we try to get saved creds from the local doc
@@ -119,7 +121,7 @@ module.exports = function (PouchDB) {
           if (err2.status === 409) {
             // if the doc was created while we were setting up,
             // try setting up again to retrieve the saved credentials.
-            await setupComDB.call(this, password)
+            await setupCrypt.call(this, password)
           } else {
             throw err2
           }
@@ -130,7 +132,7 @@ module.exports = function (PouchDB) {
     }
   }
 
-  async function importComDB (password, exportString) {
+  async function importCrypt (password, exportString) {
     this._crypt = await Crypt.import(password, exportString)
     try {
       await this._encrypted.put({ _id: LOCAL_ID, exportString })
@@ -149,27 +151,27 @@ module.exports = function (PouchDB) {
     ]
   }
 
+  function setupComDB (opts = {}) {
+    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
+    this._encrypted = setupEncrypted.call(this, encryptedName, encryptedOpts)
+    setupDecrypted.call(this)
+  }
+
   // setup function; must call before anything works
   PouchDB.prototype.setPassword = async function (password, opts = {}) {
     if (!password) { throw new Error(PASSWORD_REQUIRED) }
     if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
-    this._password = password
-    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
-    this._encrypted = setupEncrypted.call(this, encryptedName, encryptedOpts)
-    setupDecrypted.call(this)
-    await setupComDB.call(this, password)
+    setupComDB.call(this, opts)
+    await setupCrypt.call(this, password)
   }
 
   PouchDB.prototype.importComDB = async function (password, exportString, opts = {}) {
     if (!password) { throw new Error(PASSWORD_REQUIRED) }
     if (typeof password !== 'string') { throw new Error(PASSWORD_NOT_STRING) }
-    if (!exportString) { throw new Error('TODO') }
-    if (typeof exportString !== 'string') { throw new Error('TODO') }
-    this._password = password
-    const [encryptedName, encryptedOpts] = parseEncryptedOpts.call(this, opts)
-    this._encrypted = setupEncrypted.call(this, encryptedName, encryptedOpts)
-    setupDecrypted.call(this)
-    await importComDB.call(this, password, exportString)
+    if (!exportString) { throw new Error(EXPORT_STRING_REQUIRED) }
+    if (typeof exportString !== 'string') { throw new Error(EXPORT_STRING_NOT_STRING) }
+    setupComDB.call(this, opts)
+    await importCrypt.call(this, password, exportString)
   }
 
   PouchDB.prototype.exportComDB = async function () {
