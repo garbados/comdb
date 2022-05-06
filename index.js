@@ -185,16 +185,30 @@ module.exports = function (PouchDB) {
   }
 
   PouchDB.prototype.loadDecrypted = function (opts = {}) {
-    const changes = this.changes({ ...opts, include_docs: true })
+    const changes = this.changes({
+      ...opts,
+      include_docs: true,
+      return_docs: false
+    })
     const promises = []
+    let docs = []
     changes.on('change', ({ doc }) => {
-      promises.push(this._encrypted.bulkDocs([doc]))
+      docs.push(doc)
+      if (docs.length >= 1000) {
+        promises.push(this._encrypted.bulkDocs({ docs }))
+        docs = []
+      }
     })
     if (opts.live) {
       return changes
     } else {
       const closed = new Promise((resolve, reject) => {
-        changes.on('complete', resolve)
+        changes.on('complete', () => {
+          if (docs.length) {
+            promises.push(this._encrypted.bulkDocs({ docs }))
+          }
+          resolve()
+        })
         changes.on('error', reject)
       })
       return closed.then(() => {
