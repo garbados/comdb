@@ -11,12 +11,13 @@ const ORIGINAL_DB = process.env.ORIGINAL_COUCH_URL || '.original'
 const ENCRYPTED_DB = process.env.ENCRYPTED_COUCH_URL || '.encrypted'
 const DECRYPTED_DB = process.env.DECRYPTED_COUCH_URL || '.decrypted'
 
-const NUM_DOCS = 1e2
+const NUM_DOCS = 1e3
 
 const db = new PouchDB(ORIGINAL_DB)
 const db2 = new PouchDB(DECRYPTED_DB)
 
 Promise.resolve().then(async () => {
+  const startTime = Date.now()
   // add some decrypted data
   console.log(`Writing ${NUM_DOCS} docs...`)
   const docs = []
@@ -42,11 +43,14 @@ Promise.resolve().then(async () => {
   // now you can use the original DB as an encrypted copy
   console.log('Setting up new database to use original as encrypted copy...')
   await db2.importComDB(PASSWORD, exportString, { name: ORIGINAL_DB })
+  console.log('Loading docs from encrypted copy...')
   await db2.loadEncrypted()
   console.log('Verifying that all expected contents have been copied over...')
   const result = await db2.allDocs()
   console.log(`Final DB has ${result.total_rows} decrypted documents in it.`)
   console.log(NUM_DOCS === result.total_rows ? 'OK!' : 'ERROR')
+  const endTime = Date.now()
+  console.log(`Encrypting ${NUM_DOCS} in place took ${endTime - startTime}ms.`)
 }).catch(console.error).then(async () => {
   await Promise.allSettled([db.destroy(), db2.destroy()])
 })
