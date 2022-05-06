@@ -8,7 +8,7 @@ PouchDB.plugin(require('..'))
 
 const PASSWORD = process.env.COMDB_PASSWORD || 'everything-to-everyone'
 const ORIGINAL_DB = process.env.ORIGINAL_COUCH_URL || '.original'
-const ENCRYPTED_DB = process.env.ENCRYPTED_COUCH_URL || '.encrypted'
+const TRANSIENT_DB = process.env.TRANSIENT_COUCH_URL || '.encrypted'
 const DECRYPTED_DB = process.env.DECRYPTED_COUCH_URL || '.decrypted'
 
 const NUM_DOCS = 1e3
@@ -27,7 +27,7 @@ Promise.resolve().then(async () => {
   await db.bulkDocs({ docs })
   // set up the encrypted copy
   console.log('Setting up the encrypted copy...')
-  await db.setPassword(PASSWORD, { name: ENCRYPTED_DB })
+  await db.setPassword(PASSWORD, { name: TRANSIENT_DB })
   console.log('Loading docs into encrypted copy...')
   await db.loadDecrypted()
   // get the export string, because it won't replicate
@@ -38,7 +38,7 @@ Promise.resolve().then(async () => {
   await db.destroy({ unencrypted_only: true })
   // copy the encrypted copy over the original
   console.log('Replicating encrypted copy over original...')
-  await PouchDB.replicate(ENCRYPTED_DB, ORIGINAL_DB)
+  await PouchDB.replicate(TRANSIENT_DB, ORIGINAL_DB)
   await db._encrypted.destroy()
   // now you can use the original DB as an encrypted copy
   console.log('Setting up new database to use original as encrypted copy...')
