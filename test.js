@@ -358,4 +358,34 @@ describe('ComDB', function () {
       assert.equal(result.length, k)
     })
   })
+
+  describe('loadDecrypted queue', function () {
+    const NUM_DOCS = 150
+
+    beforeEach(async function () {
+      this.db2 = new PouchDB('.test-load-decrypted')
+      // add docs to DB
+      const docs = []
+      for (let i = 0; i < NUM_DOCS; i++) {
+        docs.push({ hello: 'world', i })
+      }
+      await this.db2.bulkDocs({ docs })
+      await this.db2.setPassword(this.password)
+    })
+
+    afterEach(async function () {
+      await this.db2.destroy()
+    })
+
+    it('should load decrypted docs efficiently', async function () {
+      const bulkDocs = this.db2._encrypted.bulkDocs
+      let callCount = 0
+      this.db2._encrypted.bulkDocs = async function () {
+        callCount++
+        return bulkDocs.apply(this, arguments)
+      }
+      await this.db2.loadDecrypted()
+      assert.equal(callCount, 2)
+    })
+  })
 })

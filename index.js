@@ -194,7 +194,7 @@ module.exports = function (PouchDB) {
     let docs = []
     changes.on('change', ({ doc }) => {
       docs.push(doc)
-      if (docs.length >= 1000) {
+      if (docs.length >= 100) {
         promises.push(this._encrypted.bulkDocs({ docs }))
         docs = []
       }
@@ -204,6 +204,7 @@ module.exports = function (PouchDB) {
     } else {
       const closed = new Promise((resolve, reject) => {
         changes.on('complete', () => {
+          // istanbul ignore else
           if (docs.length) {
             promises.push(this._encrypted.bulkDocs({ docs }))
           }
