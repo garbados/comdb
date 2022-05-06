@@ -27,6 +27,7 @@ Promise.resolve().then(async () => {
   // set up the encrypted copy
   console.log('Setting up the encrypted copy...')
   await db.setPassword(PASSWORD, { name: ENCRYPTED_DB })
+  console.log('Loading docs into encrypted copy...')
   await db.loadDecrypted()
   // get the export string, because it won't replicate
   console.log('Preparing to export to new database...')
@@ -37,6 +38,7 @@ Promise.resolve().then(async () => {
   // copy the encrypted copy over the original
   console.log('Replicating encrypted copy over original...')
   await PouchDB.replicate(ENCRYPTED_DB, ORIGINAL_DB)
+  await db._encrypted.destroy()
   // now you can use the original DB as an encrypted copy
   console.log('Setting up new database to use original as encrypted copy...')
   await db2.importComDB(PASSWORD, exportString, { name: ORIGINAL_DB })
@@ -45,6 +47,6 @@ Promise.resolve().then(async () => {
   const result = await db2.allDocs()
   console.log(`Final DB has ${result.total_rows} decrypted documents in it.`)
   console.log(NUM_DOCS === result.total_rows ? 'OK!' : 'ERROR')
-}).catch(console.warn).then(async () => {
+}).catch(console.error).then(async () => {
   await Promise.allSettled([db.destroy(), db2.destroy()])
 })
