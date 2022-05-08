@@ -16,9 +16,10 @@
     "cov:node": "nyc -s npm run test:node",
     "cov:browser": "nyc -s --no-clean --instrument false mochify --transform [ babelify --ignore [ test ] --plugins [ babel-plugin-istanbul ] ] test.js",
     "coveralls": "npm run cov && nyc report --reporter=text-lcov > lcov.info",
-    "example": "npm run example:couchdb && npm run example:e2e",
+    "example": "npm run example:couchdb && npm run example:e2e && npm run example:inplace",
     "example:couchdb": "./examples/couchdb.js",
-    "example:e2e": "./examples/e2e.js"
+    "example:e2e": "./examples/e2e.js",
+    "example:inplace": "./examples/inplace.js"
   },
   "repository": {
     "type": "git",
